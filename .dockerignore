@@ -1,14 +1,9 @@
 target
 node_modules
-apps/web/node_modules
-apps/web/build
 .svelte-kit
-apps/web/.svelte-kit
 build
 .git
 .env
-apps/api/.env
-apps/web/.env
 deploy/*.env
 Dockerfile*
 docker-compose*.yml
