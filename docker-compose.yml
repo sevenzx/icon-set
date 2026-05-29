@@ -1,0 +1,33 @@
+services:
+  icon-set-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: icon-set-api
+    restart: unless-stopped
+    env_file:
+      - ./deploy/api.env
+    environment:
+      API_BIND_ADDR: 0.0.0.0:3000
+    networks:
+      - icon-set
+
+  icon-set-web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_RAW_ASSET_BASE_URL: ${VITE_RAW_ASSET_BASE_URL:-}
+    container_name: icon-set-web
+    restart: unless-stopped
+    depends_on:
+      - icon-set-api
+    expose:
+      - "80"
+    networks:
+      - icon-set
+
+networks:
+  icon-set:
+    name: icon-set

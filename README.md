@@ -112,6 +112,55 @@ npm run build:web
 npm run check:api
 ```
 
+## Docker 部署
+
+项目提供 `docker-compose.yml`：
+
+- `icon-set-api`：Rust Axum API，读取 `deploy/api.env`
+- `icon-set-web`：Caddy 静态前端，同时把 `/api/*` 反代到 API 容器
+
+准备部署环境变量：
+
+```bash
+cp deploy/api.env.example deploy/api.env
+```
+
+然后编辑 `deploy/api.env`，至少设置 `ADMIN_PASSWORD`、`GITHUB_OWNER`、`GITHUB_REPO`、`GITHUB_BRANCH`、`GITHUB_TOKEN`、`CORS_ORIGIN`。容器内 API 监听地址会由 compose 覆盖为 `0.0.0.0:3000`。
+
+启动：
+
+```bash
+docker compose up -d --build
+```
+
+默认 compose 不直接暴露公网端口，适合放在 Caddy、Nginx 等反代后面。如果需要直接发布宿主机端口，可以叠加端口映射文件：
+
+```bash
+WEB_PORT=8080 docker compose -f docker-compose.yml -f docker-compose.publish.yml up -d --build
+```
+
+如果宿主机已有一个统一入口 Caddy，可以让外层 Caddy 加入 `icon-set` 网络，然后反代到 `icon-set-web:80`：
+
+```bash
+docker network connect icon-set your-caddy-container
+```
+
+外层 Caddyfile 示例：
+
+```caddyfile
+icon-set.19970925.xyz {
+  encode zstd gzip
+  reverse_proxy icon-set-web:80
+}
+```
+
+同域部署时，`deploy/api.env` 建议设置：
+
+```env
+CORS_ORIGIN=https://icon-set.19970925.xyz
+COOKIE_SECURE=true
+```
+
 ## 部署建议
 
 前端可以静态部署到任意平台，例如 Vercel、Netlify、Cloudflare Pages。后端需要一个能运行 Rust 服务的环境，例如 Fly.io、Render、Railway、VPS 或容器平台。
