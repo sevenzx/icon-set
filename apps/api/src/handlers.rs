@@ -397,7 +397,9 @@ async fn save_manifest(
     sha: Option<&str>,
     message: &str,
 ) -> AppResult<()> {
-    let content = serde_json::to_vec_pretty(manifest)?;
+    let mut manifest = manifest.clone();
+    sort_icons(&mut manifest.icons);
+    let content = serde_json::to_vec_pretty(&manifest)?;
     state
         .github
         .put_file(&manifest_path(&manifest.id), &content, message, sha)
@@ -468,13 +470,12 @@ fn sort_sets(sets: &mut [IconSetSummary]) {
     });
 }
 
-/// 按图标名称降序排序。
+/// 按图标名称升序排序。
 fn sort_icons(icons: &mut [IconEntry]) {
     icons.sort_by(|left, right| {
-        right
-            .name
+        left.name
             .to_lowercase()
-            .cmp(&left.name.to_lowercase())
+            .cmp(&right.name.to_lowercase())
             .then_with(|| left.id.cmp(&right.id))
     });
 }
@@ -626,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn sort_icons_orders_by_name_descending_case_insensitive() {
+    fn sort_icons_orders_by_name_ascending_case_insensitive() {
         let mut icons = vec![
             icon("1", "Alpha"),
             icon("2", "zulu"),
@@ -637,7 +638,7 @@ mod tests {
         sort_icons(&mut icons);
 
         let names = icons.into_iter().map(|icon| icon.name).collect::<Vec<_>>();
-        assert_eq!(names, vec!["zulu", "Echo Room", "bravo", "Alpha"]);
+        assert_eq!(names, vec!["Alpha", "bravo", "Echo Room", "zulu"]);
     }
 
     #[test]
