@@ -12,6 +12,7 @@
     uploadIcon,
     uploadIconsBatch
   } from '$lib/api';
+  import { toast } from '$lib/toast';
   import type { IconEntry, IconManifest } from '$lib/types';
 
   const batchUploadMaxBytes = 10 * 1024 * 1024;
@@ -23,7 +24,6 @@
   let batchUploading = false;
   let deletingIcon = false;
   let error = '';
-  let notice = '';
   let metaForm = { name: '', description: '' };
   let uploadName = '';
   let selectedFile: File | null = null;
@@ -70,6 +70,7 @@
       renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
     } catch (err) {
       error = err instanceof Error ? err.message : '集合加载失败';
+      if (manifest) toast.error(error);
     } finally {
       loading = false;
     }
@@ -80,14 +81,14 @@
     if (!manifest) return;
     savingMeta = true;
     error = '';
-    notice = '';
 
     try {
       await updateSet(manifest.id, metaForm);
       await refreshManifest();
-      notice = '集合信息已更新';
+      toast.info('集合信息已更新');
     } catch (err) {
       error = err instanceof Error ? err.message : '保存集合失败';
+      toast.error(error);
     } finally {
       savingMeta = false;
     }
@@ -115,10 +116,10 @@
   async function submitUpload() {
     if (!manifest || !selectedFile) return;
     error = '';
-    notice = '';
 
     if (uploadName.trim() && !isValidIconName(uploadName)) {
       error = iconNameError(uploadName);
+      toast.error(error);
       return;
     }
 
@@ -129,9 +130,10 @@
       uploadName = '';
       selectedFile = null;
       renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
-      notice = '图片已上传到 GitHub';
+      toast.info('图片已上传到 GitHub');
     } catch (err) {
       error = err instanceof Error ? err.message : '上传失败';
+      toast.error(error);
     } finally {
       uploading = false;
     }
@@ -141,14 +143,15 @@
   async function submitBatchUpload() {
     if (!manifest) return;
     error = '';
-    notice = '';
 
     if (batchFiles.length === 0 && !archiveFile) {
       error = '请选择图片或 zip 压缩包';
+      toast.error(error);
       return;
     }
     if (batchTooLarge) {
       error = '批量上传总体积不能超过 10MB';
+      toast.error(error);
       return;
     }
 
@@ -161,9 +164,10 @@
       if (batchFilesInput) batchFilesInput.value = '';
       if (archiveInput) archiveInput.value = '';
       renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
-      notice = '批量图片已上传到 GitHub';
+      toast.info('批量图片已上传到 GitHub');
     } catch (err) {
       error = err instanceof Error ? err.message : '批量上传失败';
+      toast.error(error);
     } finally {
       batchUploading = false;
     }
@@ -173,19 +177,20 @@
   async function submitRename(iconId: string) {
     if (!manifest) return;
     error = '';
-    notice = '';
 
     if (!isValidIconName(renameDrafts[iconId])) {
       error = iconNameError(renameDrafts[iconId]);
+      toast.error(error);
       return;
     }
 
     try {
       manifest = await renameIcon(manifest.id, iconId, renameDrafts[iconId]);
       renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
-      notice = '图标名称已更新';
+      toast.info('图标名称已更新');
     } catch (err) {
       error = err instanceof Error ? err.message : '改名失败';
+      toast.error(error);
     }
   }
 
@@ -193,7 +198,6 @@
   function openDeleteIconModal(icon: IconEntry) {
     deleteIconTarget = icon;
     error = '';
-    notice = '';
   }
 
   /// 关闭删除图标确认弹窗。
@@ -208,16 +212,16 @@
     if (!deleteIconTarget) return;
     deletingIcon = true;
     error = '';
-    notice = '';
 
     try {
       const deletedName = deleteIconTarget.name;
       manifest = await removeIcon(manifest.id, deleteIconTarget.id);
       renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
       deleteIconTarget = null;
-      notice = `图标 ${deletedName} 已删除`;
+      toast.info(`图标 ${deletedName} 已删除`);
     } catch (err) {
       error = err instanceof Error ? err.message : '删除失败';
+      toast.error(error);
     } finally {
       deletingIcon = false;
     }
@@ -291,13 +295,6 @@
       </label>
     </form>
   </section>
-
-  {#if error}
-    <div class="notice error">{error}</div>
-  {/if}
-  {#if notice}
-    <div class="notice">{notice}</div>
-  {/if}
 
   <section class="manage-grid">
     <form class="panel panel-pad upload-card" on:submit|preventDefault={submitUpload}>

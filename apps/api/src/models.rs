@@ -31,6 +31,8 @@ pub struct IconEntry {
     #[serde(default)]
     pub path: String,
     pub url: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub md5: String,
 }
 
 #[derive(Debug, Deserialize)]

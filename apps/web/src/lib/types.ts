@@ -11,6 +11,7 @@ export type IconEntry = {
   name: string;
   path: string;
   url: string;
+  md5?: string;
 };
 
 export type IconManifest = {

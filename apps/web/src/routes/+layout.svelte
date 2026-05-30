@@ -1,3 +1,7 @@
+<script lang="ts">
+  import ToastHost from '$lib/ToastHost.svelte';
+</script>
+
 <svelte:head>
   <title>Icon Set Vault</title>
   <meta
@@ -11,6 +15,8 @@
     <slot />
   </main>
 </div>
+
+<ToastHost />
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');

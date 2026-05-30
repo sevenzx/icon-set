@@ -3,6 +3,7 @@
   import { manifestRawUrl } from '$lib/asset-url';
   import { copyText } from '$lib/clipboard';
   import { listSets } from '$lib/api';
+  import { toast } from '$lib/toast';
   import type { IconSetSummary } from '$lib/types';
 
   let sets: IconSetSummary[] = [];
@@ -42,11 +43,13 @@
     try {
       await copyText(url);
       copiedSetId = setId;
+      toast.info('集合地址已复制');
       window.setTimeout(() => {
         if (copiedSetId === setId) copiedSetId = '';
       }, 1600);
     } catch {
       failedSetId = setId;
+      toast.error('复制集合地址失败');
       window.setTimeout(() => {
         if (failedSetId === setId) failedSetId = '';
       }, 1600);

@@ -1,21 +1,20 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { login } from '$lib/api';
+  import { toast } from '$lib/toast';
 
   let password = '';
   let loading = false;
-  let error = '';
 
   /// 提交管理员密码并进入后台。
   async function submitLogin() {
     loading = true;
-    error = '';
 
     try {
       await login(password);
       await goto('/admin');
     } catch (err) {
-      error = err instanceof Error ? err.message : '登录失败';
+      toast.error(err instanceof Error ? err.message : '登录失败');
     } finally {
       loading = false;
     }
@@ -43,10 +42,6 @@
         placeholder="输入密码"
       />
     </label>
-
-    {#if error}
-      <div class="notice error">{error}</div>
-    {/if}
 
     <button class="action" type="submit" disabled={loading || !password}>
       {loading ? '验证中...' : '登录后台'}

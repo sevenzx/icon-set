@@ -1,4 +1,7 @@
-use std::io::{Cursor, Read};
+use std::{
+    collections::HashMap,
+    io::{Cursor, Read},
+};
 
 use axum::{
     Json,
@@ -261,7 +264,10 @@ pub async fn upload_icon(
         _ => filename_stem(&upload.file_name),
     };
     let icon_id = Uuid::new_v4().to_string();
+    let md5 = file_md5(&upload.bytes);
     let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
+    hydrate_missing_icon_md5(&state, &mut manifest).await?;
+    ensure_unique_icon_md5(&manifest, &md5)?;
     let (name, path) =
         unique_icon_name_and_path(&state, &manifest, &set_id, &name, &extension, None, None)
             .await?;
@@ -276,6 +282,7 @@ pub async fn upload_icon(
         name,
         path: path.clone(),
         url: state.github.raw_url(&path),
+        md5,
     });
     normalize_manifest(&state, &set_id, &mut manifest);
     save_manifest(
@@ -314,7 +321,7 @@ pub async fn upload_icons_batch(
         match field_name.as_str() {
             "files" => {
                 ensure_allowed_image_file(&file_name)?;
-                uploads.push(BatchUploadFile { file_name, bytes });
+                uploads.push(BatchUploadFile::new(file_name, bytes));
             }
             "archive" => {
                 let archive_uploads = extract_zip_images(&file_name, bytes)?;
@@ -338,6 +345,8 @@ pub async fn upload_icons_batch(
     }
 
     let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
+    hydrate_missing_icon_md5(&state, &mut manifest).await?;
+    ensure_unique_batch_md5s(&manifest, &uploads)?;
     let mut new_icons = Vec::with_capacity(uploads.len());
 
     for upload in uploads {
@@ -364,6 +373,7 @@ pub async fn upload_icons_batch(
             name,
             path: path.clone(),
             url: state.github.raw_url(&path),
+            md5: upload.md5,
         };
         manifest.icons.push(icon.clone());
         new_icons.push(icon);
@@ -410,11 +420,15 @@ pub async fn rename_icon(
     .await?;
     let url = state.github.raw_url(&path);
     let path_changed = current_icon.path != path;
+    let mut md5 = current_icon.md5.clone();
 
     if path_changed {
         let Some(file) = state.github.get_file(&current_icon.path).await? else {
             return Err(AppError::NotFound);
         };
+        if md5.is_empty() {
+            md5 = file_md5(&file.content);
+        }
         state
             .github
             .put_file(
@@ -430,6 +444,7 @@ pub async fn rename_icon(
     icon.name = name;
     icon.path = path;
     icon.url = url;
+    icon.md5 = md5;
     manifest.updated_at = now_iso();
     sort_icons(&mut manifest.icons);
 
@@ -493,6 +508,18 @@ struct UploadFile {
 struct BatchUploadFile {
     file_name: String,
     bytes: Vec<u8>,
+    md5: String,
+}
+
+impl BatchUploadFile {
+    fn new(file_name: String, bytes: Vec<u8>) -> Self {
+        let md5 = file_md5(&bytes);
+        Self {
+            file_name,
+            bytes,
+            md5,
+        }
+    }
 }
 
 /// 读取 sets.json，缺失时返回空列表。
@@ -577,6 +604,64 @@ async fn delete_github_file_if_exists(
         return Ok(());
     };
     state.github.delete_file(path, &file.sha, message).await
+}
+
+/// 计算图片内容 MD5，用于上传去重校验。
+fn file_md5(bytes: &[u8]) -> String {
+    format!("{:x}", md5::compute(bytes))
+}
+
+/// 为历史 manifest 中缺失 MD5 的图标补齐内容哈希。
+async fn hydrate_missing_icon_md5(state: &AppState, manifest: &mut IconManifest) -> AppResult<()> {
+    for icon in &mut manifest.icons {
+        if !icon.md5.is_empty() || icon.path.is_empty() {
+            continue;
+        }
+
+        if let Some(file) = state.github.get_file(&icon.path).await? {
+            icon.md5 = file_md5(&file.content);
+        }
+    }
+
+    Ok(())
+}
+
+/// 确认待上传图片内容没有在当前集合中出现过。
+fn ensure_unique_icon_md5(manifest: &IconManifest, md5: &str) -> AppResult<()> {
+    if md5.is_empty() {
+        return Ok(());
+    }
+
+    if let Some(icon) = manifest
+        .icons
+        .iter()
+        .find(|icon| !icon.md5.is_empty() && icon.md5.eq_ignore_ascii_case(md5))
+    {
+        return Err(AppError::Conflict(format!(
+            "图片内容已存在，已登记为 {}（{}）",
+            icon.name, icon.path
+        )));
+    }
+
+    Ok(())
+}
+
+/// 确认批量上传图片之间、以及它们和当前集合之间都没有重复内容。
+fn ensure_unique_batch_md5s(manifest: &IconManifest, uploads: &[BatchUploadFile]) -> AppResult<()> {
+    let mut seen = HashMap::<String, String>::new();
+
+    for upload in uploads {
+        ensure_unique_icon_md5(manifest, &upload.md5)?;
+        if let Some(existing_file_name) = seen.insert(upload.md5.clone(), upload.file_name.clone())
+        {
+            return Err(AppError::Conflict(format!(
+                "批量上传中存在重复图片：{} 和 {}",
+                existing_file_name, upload.file_name
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 /// 规范化 manifest 中的派生字段和排序。
@@ -787,10 +872,7 @@ fn extract_zip_images(file_name: &str, bytes: Vec<u8>) -> AppResult<Vec<BatchUpl
             continue;
         }
         extracted_total = checked_total_upload_bytes(extracted_total, content.len())?;
-        uploads.push(BatchUploadFile {
-            file_name: entry_name,
-            bytes: content,
-        });
+        uploads.push(BatchUploadFile::new(entry_name, content));
     }
 
     Ok(uploads)
@@ -851,6 +933,17 @@ mod tests {
             name: name.to_string(),
             path: String::new(),
             url: String::new(),
+            md5: String::new(),
+        }
+    }
+
+    fn icon_with_md5(id: &str, name: &str, md5: &str) -> IconEntry {
+        IconEntry {
+            id: id.to_string(),
+            name: name.to_string(),
+            path: format!("sets/emby/icons/{name}.png"),
+            url: String::new(),
+            md5: md5.to_string(),
         }
     }
 
@@ -928,6 +1021,47 @@ mod tests {
         assert_eq!(uploads.len(), 1);
         assert_eq!(uploads[0].file_name, "jack.png");
         assert_eq!(uploads[0].bytes, b"png");
+        assert_eq!(uploads[0].md5, file_md5(b"png"));
+    }
+
+    #[test]
+    fn file_md5_returns_expected_digest() {
+        assert_eq!(file_md5(b"hello"), "5d41402abc4b2a76b9719d911017c592");
+    }
+
+    #[test]
+    fn ensure_unique_icon_md5_rejects_existing_icon_in_current_manifest() {
+        let manifest = IconManifest {
+            id: "emby".to_string(),
+            name: "Emby".to_string(),
+            description: String::new(),
+            icons: vec![icon_with_md5(
+                "1",
+                "alpha",
+                "5d41402abc4b2a76b9719d911017c592",
+            )],
+            updated_at: String::new(),
+        };
+
+        assert!(ensure_unique_icon_md5(&manifest, file_md5(b"world").as_str()).is_ok());
+        assert!(ensure_unique_icon_md5(&manifest, file_md5(b"hello").as_str()).is_err());
+    }
+
+    #[test]
+    fn ensure_unique_batch_md5s_rejects_duplicates_inside_batch() {
+        let manifest = IconManifest {
+            id: "emby".to_string(),
+            name: "Emby".to_string(),
+            description: String::new(),
+            icons: Vec::new(),
+            updated_at: String::new(),
+        };
+        let uploads = vec![
+            BatchUploadFile::new("alpha.png".to_string(), b"same".to_vec()),
+            BatchUploadFile::new("beta.png".to_string(), b"same".to_vec()),
+        ];
+
+        assert!(ensure_unique_batch_md5s(&manifest, &uploads).is_err());
     }
 }
 

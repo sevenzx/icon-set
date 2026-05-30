@@ -4,6 +4,7 @@
   import { manifestRawUrl } from '$lib/asset-url';
   import { getSet } from '$lib/api';
   import { copyText } from '$lib/clipboard';
+  import { toast } from '$lib/toast';
   import type { IconEntry, IconManifest } from '$lib/types';
 
   let manifest: IconManifest | null = null;
@@ -52,11 +53,13 @@
     try {
       await copyText(url);
       copiedUrl = url;
+      toast.info('地址已复制');
       window.setTimeout(() => {
         if (copiedUrl === url) copiedUrl = '';
       }, 1600);
     } catch {
       failedUrl = url;
+      toast.error('复制地址失败');
       window.setTimeout(() => {
         if (failedUrl === url) failedUrl = '';
       }, 1600);

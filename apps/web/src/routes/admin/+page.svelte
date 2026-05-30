@@ -3,13 +3,14 @@
   import { onMount } from 'svelte';
   import DeleteConfirmModal from '$lib/DeleteConfirmModal.svelte';
   import { createSet, deleteSet, getSession, listSets, logout } from '$lib/api';
+  import { toast } from '$lib/toast';
   import type { IconSetSummary } from '$lib/types';
 
   let sets: IconSetSummary[] = [];
   let loading = true;
   let saving = false;
   let deleting = false;
-  let error = '';
+  let listError = '';
   let deleteTarget: IconSetSummary | null = null;
   let newSet = {
     id: '',
@@ -30,12 +31,17 @@
   /// 加载后台集合列表。
   async function refreshSets() {
     loading = true;
-    error = '';
+    listError = '';
 
     try {
       sets = await listSets();
     } catch (err) {
-      error = err instanceof Error ? err.message : '集合加载失败';
+      const message = err instanceof Error ? err.message : '集合加载失败';
+      if (sets.length > 0) {
+        toast.error(message);
+      } else {
+        listError = message;
+      }
     } finally {
       loading = false;
     }
@@ -44,14 +50,13 @@
   /// 创建新图标集合并跳转到集合管理页。
   async function submitCreateSet() {
     saving = true;
-    error = '';
 
     try {
       const created = await createSet(newSet);
       newSet = { id: '', name: '', description: '' };
       await goto(`/admin/sets/${created.id}`);
     } catch (err) {
-      error = err instanceof Error ? err.message : '创建集合失败';
+      toast.error(err instanceof Error ? err.message : '创建集合失败');
     } finally {
       saving = false;
     }
@@ -65,7 +70,6 @@
   /// 打开删除集合确认弹窗。
   function openDeleteSetModal(set: IconSetSummary) {
     deleteTarget = set;
-    error = '';
   }
 
   /// 关闭删除集合确认弹窗。
@@ -78,13 +82,14 @@
   async function confirmDeleteSet() {
     if (!deleteTarget) return;
     deleting = true;
-    error = '';
 
     try {
+      const deletedName = deleteTarget.name;
       sets = await deleteSet(deleteTarget.id);
       deleteTarget = null;
+      toast.info(`集合 ${deletedName} 已删除`);
     } catch (err) {
-      error = err instanceof Error ? err.message : '删除集合失败';
+      toast.error(err instanceof Error ? err.message : '删除集合失败');
     } finally {
       deleting = false;
     }
@@ -167,8 +172,8 @@
 
     {#if loading}
       <div class="notice">正在读取 sets.json...</div>
-    {:else if error}
-      <div class="notice error">{error}</div>
+    {:else if listError}
+      <div class="notice error">{listError}</div>
     {:else if sets.length === 0}
       <div class="notice">还没有集合，请先创建一个。</div>
     {:else}
