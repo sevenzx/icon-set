@@ -13,6 +13,12 @@ pub type AppResult<T> = Result<T, AppError>;
 pub enum AppError {
     #[error("认证已失效，请重新登录")]
     Unauthorized,
+    #[error("请求来源不可信")]
+    Forbidden,
+    #[error("请求过于频繁，请稍后再试")]
+    RateLimited,
+    #[error("重复提交，请稍后再试")]
+    DuplicateSubmit,
     #[error("没有找到资源")]
     NotFound,
     #[error("资源已存在：{0}")]
@@ -35,6 +41,9 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let status = match self {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::Forbidden => StatusCode::FORBIDDEN,
+            Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            Self::DuplicateSubmit => StatusCode::CONFLICT,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,

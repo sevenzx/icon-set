@@ -20,9 +20,11 @@ use crate::{auth::SessionStore, config::Config, github::GitHubClient};
 
 #[derive(Clone)]
 pub struct AppState {
-    pub config: Config,
-    pub github: GitHubClient,
-    pub sessions: SessionStore,
+    pub(crate) config: Config,
+    pub(crate) github: GitHubClient,
+    pub(crate) sessions: SessionStore,
+    pub(crate) login_rate_limits: middleware::LoginRateLimitStore,
+    pub(crate) duplicate_submissions: middleware::DuplicateSubmissionStore,
 }
 
 /// 启动 Axum API 服务。
@@ -42,6 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: config.clone(),
         github,
         sessions: auth::new_session_store(),
+        login_rate_limits: middleware::new_login_rate_limit_store(),
+        duplicate_submissions: middleware::new_duplicate_submission_store(),
     };
     let app = build_router(state)?;
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
@@ -81,6 +85,15 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
             "/sets/{set_id}/icons/{icon_id}",
             patch(handlers::rename_icon).delete(handlers::delete_icon),
         )
+        .route_layer(axum_middleware::from_fn(middleware::audit_admin))
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::prevent_duplicate_submit,
+        ))
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::require_csrf,
+        ))
         .route_layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::require_admin,
@@ -90,7 +103,13 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         .route("/api/health", get(handlers::health))
         .route("/api/sets", get(handlers::list_sets))
         .route("/api/sets/{set_id}", get(handlers::get_set))
-        .route("/api/auth/login", post(handlers::login))
+        .route(
+            "/api/auth/login",
+            post(handlers::login).route_layer(axum_middleware::from_fn_with_state(
+                state.clone(),
+                middleware::limit_login,
+            )),
+        )
         .route("/api/auth/logout", post(handlers::logout))
         .route("/api/auth/session", get(handlers::session))
         .nest("/api/admin", admin_router)
