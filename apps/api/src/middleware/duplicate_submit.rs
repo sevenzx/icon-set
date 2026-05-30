@@ -14,7 +14,7 @@ use axum::{
 };
 use tokio::sync::RwLock;
 
-use crate::{AppState, error::AppError};
+use crate::{AppState, error::AppError, limits};
 
 const DUPLICATE_SUBMIT_WINDOW: Duration = Duration::from_secs(3);
 const ADMIN_TOKEN_HEADER: &str = "x-admin-token";
@@ -49,7 +49,11 @@ pub async fn prevent_duplicate_submit(
     }
 
     let (parts, body) = request.into_parts();
-    let body_bytes = to_bytes(body, state.config.max_upload_bytes)
+    let body_limit = state
+        .config
+        .max_upload_bytes
+        .max(limits::BATCH_MULTIPART_BODY_LIMIT);
+    let body_bytes = to_bytes(body, body_limit)
         .await
         .map_err(|err| AppError::BadRequest(format!("请求体读取失败：{err}")))?;
     let fingerprint = request_fingerprint(&parts.method, &parts.uri, &parts.headers, &body_bytes);

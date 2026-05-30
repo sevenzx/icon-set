@@ -195,6 +195,23 @@ export function uploadIcon(setId: string, name: string, file: File) {
   });
 }
 
+/// 批量上传图片或 zip 压缩包到指定图标集合。
+export function uploadIconsBatch(setId: string, files: File[], archive: File | null) {
+  const form = new FormData();
+
+  for (const file of files) {
+    form.append('files', file);
+  }
+  if (archive) {
+    form.append('archive', archive);
+  }
+
+  return adminRequest<IconManifest>(`/api/admin/sets/${encodeURIComponent(setId)}/icons/batch`, {
+    method: 'POST',
+    body: form
+  });
+}
+
 /// 修改指定图标名称。
 export function renameIcon(setId: string, iconId: string, name: string) {
   return adminRequest<IconManifest>(

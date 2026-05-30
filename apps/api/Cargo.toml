@@ -18,3 +18,4 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 urlencoding = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }

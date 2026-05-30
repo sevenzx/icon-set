@@ -1,3 +1,5 @@
+use std::io::{Cursor, Read};
+
 use axum::{
     Json,
     extract::{Multipart, Path, State},
@@ -11,11 +13,13 @@ use uuid::Uuid;
 use crate::{
     AppState, auth,
     error::{AppError, AppResult},
+    limits,
     models::{
         CreateSetRequest, IconEntry, IconManifest, IconSetSummary, LoginRequest, RenameIconRequest,
         SessionResponse, UpdateSetRequest,
     },
 };
+use zip::ZipArchive;
 
 const SETS_INDEX_PATH: &str = "sets.json";
 const ICON_NAME_MAX_LEN: usize = 120;
@@ -286,6 +290,99 @@ pub async fn upload_icon(
     Ok(Json(manifest))
 }
 
+/// 批量上传图片或 zip 压缩包并写入对应集合的 manifest。
+pub async fn upload_icons_batch(
+    State(state): State<AppState>,
+    Path(set_id): Path<String>,
+    mut multipart: Multipart,
+) -> AppResult<Json<IconManifest>> {
+    validate_set_id(&set_id)?;
+
+    let mut uploads: Vec<BatchUploadFile> = Vec::new();
+    let mut total_bytes: usize = 0;
+
+    while let Some(field) = multipart.next_field().await? {
+        let field_name = field.name().unwrap_or_default().to_string();
+        let file_name = field.file_name().unwrap_or("upload").to_string();
+        let bytes = field.bytes().await?.to_vec();
+
+        if bytes.is_empty() {
+            continue;
+        }
+
+        total_bytes = checked_total_upload_bytes(total_bytes, bytes.len())?;
+        match field_name.as_str() {
+            "files" => {
+                ensure_allowed_image_file(&file_name)?;
+                uploads.push(BatchUploadFile { file_name, bytes });
+            }
+            "archive" => {
+                let archive_uploads = extract_zip_images(&file_name, bytes)?;
+                uploads.extend(archive_uploads);
+            }
+            _ => {}
+        }
+    }
+
+    if uploads.is_empty() {
+        return Err(AppError::BadRequest("请选择图片或 zip 压缩包".to_string()));
+    }
+
+    let extracted_total = uploads.iter().try_fold(0usize, |total, upload| {
+        checked_total_upload_bytes(total, upload.bytes.len())
+    })?;
+    if extracted_total > limits::BATCH_UPLOAD_MAX_BYTES {
+        return Err(AppError::BadRequest(
+            "批量图片总体积不能超过 10MB".to_string(),
+        ));
+    }
+
+    let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
+    let mut new_icons = Vec::with_capacity(uploads.len());
+
+    for upload in uploads {
+        let extension = detect_extension(&upload.file_name, None)?;
+        let requested_name = filename_stem(&upload.file_name);
+        let (name, path) = unique_icon_name_and_path(
+            &state,
+            &manifest,
+            &set_id,
+            &requested_name,
+            &extension,
+            None,
+            None,
+        )
+        .await?;
+
+        state
+            .github
+            .put_file(&path, &upload.bytes, &format!("Add icon {name}"), None)
+            .await?;
+
+        let icon = IconEntry {
+            id: Uuid::new_v4().to_string(),
+            name,
+            path: path.clone(),
+            url: state.github.raw_url(&path),
+        };
+        manifest.icons.push(icon.clone());
+        new_icons.push(icon);
+    }
+
+    manifest.updated_at = now_iso();
+    normalize_manifest(&state, &set_id, &mut manifest);
+    save_manifest(
+        &state,
+        &manifest,
+        Some(&manifest_sha),
+        &format!("Batch add {} icons to {set_id}", new_icons.len()),
+    )
+    .await?;
+    sync_set_summary(&state, &manifest).await?;
+
+    Ok(Json(manifest))
+}
+
 /// 修改指定图标的名称。
 pub async fn rename_icon(
     State(state): State<AppState>,
@@ -390,6 +487,11 @@ pub async fn delete_icon(
 struct UploadFile {
     file_name: String,
     content_type: Option<String>,
+    bytes: Vec<u8>,
+}
+
+struct BatchUploadFile {
+    file_name: String,
     bytes: Vec<u8>,
 }
 
@@ -629,6 +731,86 @@ fn detect_extension(file_name: &str, content_type: Option<&str>) -> AppResult<St
     }
 }
 
+/// 确认批量上传累计体积不超过限制。
+fn checked_total_upload_bytes(current: usize, next: usize) -> AppResult<usize> {
+    let total = current
+        .checked_add(next)
+        .ok_or_else(|| AppError::BadRequest("批量图片总体积不能超过 10MB".to_string()))?;
+
+    if total > limits::BATCH_UPLOAD_MAX_BYTES {
+        return Err(AppError::BadRequest(
+            "批量图片总体积不能超过 10MB".to_string(),
+        ));
+    }
+
+    Ok(total)
+}
+
+/// 校验直接上传的文件必须是支持的图片。
+fn ensure_allowed_image_file(file_name: &str) -> AppResult<()> {
+    detect_extension(file_name, None).map(|_| ())
+}
+
+/// 从 zip 压缩包里提取支持的图片文件。
+fn extract_zip_images(file_name: &str, bytes: Vec<u8>) -> AppResult<Vec<BatchUploadFile>> {
+    let extension = file_name.rsplit('.').next().unwrap_or_default();
+    if !extension.eq_ignore_ascii_case("zip") {
+        return Err(AppError::BadRequest("压缩包只支持 zip 格式".to_string()));
+    }
+
+    let reader = Cursor::new(bytes);
+    let mut archive = ZipArchive::new(reader)
+        .map_err(|err| AppError::BadRequest(format!("zip 压缩包无效：{err}")))?;
+    let mut uploads = Vec::new();
+    let mut extracted_total = 0usize;
+
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|err| AppError::BadRequest(format!("zip 文件读取失败：{err}")))?;
+        if entry.is_dir() {
+            continue;
+        }
+
+        let Some(entry_name) = archive_image_file_name(entry.name()) else {
+            continue;
+        };
+        if detect_extension(&entry_name, None).is_err() {
+            continue;
+        }
+
+        let mut content = Vec::new();
+        entry
+            .read_to_end(&mut content)
+            .map_err(|err| AppError::BadRequest(format!("zip 图片读取失败：{err}")))?;
+        if content.is_empty() {
+            continue;
+        }
+        extracted_total = checked_total_upload_bytes(extracted_total, content.len())?;
+        uploads.push(BatchUploadFile {
+            file_name: entry_name,
+            bytes: content,
+        });
+    }
+
+    Ok(uploads)
+}
+
+/// 从 zip entry 路径里提取可用文件名，跳过系统隐藏文件。
+fn archive_image_file_name(path: &str) -> Option<String> {
+    let file_name = path
+        .rsplit(['/', '\\'])
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+
+    if file_name.starts_with('.') || path.starts_with("__MACOSX/") {
+        return None;
+    }
+
+    Some(file_name.to_string())
+}
+
 /// 判断扩展名是否在允许的图片类型内。
 fn is_allowed_extension(extension: &str) -> bool {
     matches!(extension, "png" | "jpg" | "jpeg" | "webp" | "svg")
@@ -660,6 +842,8 @@ fn sanitize_icon_name(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use zip::{ZipWriter, write::SimpleFileOptions};
 
     fn icon(id: &str, name: &str) -> IconEntry {
         IconEntry {
@@ -713,6 +897,37 @@ mod tests {
             "sets/emby/icons/feiyue-caihong.png"
         );
         assert_eq!(icon_path("emby", "fych", "png"), "sets/emby/icons/fych.png");
+    }
+
+    #[test]
+    fn filename_stem_sanitizes_batch_names() {
+        assert_eq!(filename_stem("jack.png"), "jack");
+        assert_eq!(filename_stem("feiyue caihong.jpeg"), "feiyue caihong");
+        assert_eq!(filename_stem("中文.png"), "Icon");
+    }
+
+    #[test]
+    fn extract_zip_images_keeps_only_supported_images() {
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file("folder/jack.png", SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"png").unwrap();
+        writer
+            .start_file("__MACOSX/._jack.png", SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"hidden").unwrap();
+        writer
+            .start_file("folder/readme.txt", SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"text").unwrap();
+        let bytes = writer.finish().unwrap().into_inner();
+
+        let uploads = extract_zip_images("icons.zip", bytes).unwrap();
+
+        assert_eq!(uploads.len(), 1);
+        assert_eq!(uploads[0].file_name, "jack.png");
+        assert_eq!(uploads[0].bytes, b"png");
     }
 }
 

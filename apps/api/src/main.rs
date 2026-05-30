@@ -4,6 +4,7 @@ mod config;
 mod error;
 mod github;
 mod handlers;
+mod limits;
 mod middleware;
 mod models;
 
@@ -84,6 +85,10 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         )
         .route("/sets/{set_id}/icons", post(handlers::upload_icon))
         .route(
+            "/sets/{set_id}/icons/batch",
+            post(handlers::upload_icons_batch),
+        )
+        .route(
             "/sets/{set_id}/icons/{icon_id}",
             patch(handlers::rename_icon).delete(handlers::delete_icon),
         )
@@ -115,7 +120,12 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         .route("/api/auth/logout", post(handlers::logout))
         .route("/api/auth/session", get(handlers::session))
         .nest("/api/admin", admin_router)
-        .layer(DefaultBodyLimit::max(state.config.max_upload_bytes))
+        .layer(DefaultBodyLimit::max(
+            state
+                .config
+                .max_upload_bytes
+                .max(limits::BATCH_MULTIPART_BODY_LIMIT),
+        ))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state);

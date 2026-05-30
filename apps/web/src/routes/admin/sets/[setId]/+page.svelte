@@ -9,23 +9,35 @@
     removeIcon,
     renameIcon,
     updateSet,
-    uploadIcon
+    uploadIcon,
+    uploadIconsBatch
   } from '$lib/api';
   import type { IconEntry, IconManifest } from '$lib/types';
+
+  const batchUploadMaxBytes = 10 * 1024 * 1024;
 
   let manifest: IconManifest | null = null;
   let loading = true;
   let savingMeta = false;
   let uploading = false;
+  let batchUploading = false;
   let deletingIcon = false;
   let error = '';
   let notice = '';
   let metaForm = { name: '', description: '' };
   let uploadName = '';
   let selectedFile: File | null = null;
+  let batchFiles: File[] = [];
+  let archiveFile: File | null = null;
+  let batchFilesInput: HTMLInputElement | null = null;
+  let archiveInput: HTMLInputElement | null = null;
   let deleteIconTarget: IconEntry | null = null;
   let renameDrafts: Record<string, string> = {};
-  const iconNamePattern = /^[A-Za-z ._-]+$/;
+  const iconNamePattern = /^[A-Za-z0-9 ._-]+$/;
+
+  $: batchTotalBytes =
+    batchFiles.reduce((total, file) => total + file.size, 0) + (archiveFile?.size ?? 0);
+  $: batchTooLarge = batchTotalBytes > batchUploadMaxBytes;
 
   /// 校验后台会话，未登录时跳转登录页。
   async function guardSession() {
@@ -87,6 +99,18 @@
     selectedFile = input.files?.[0] ?? null;
   }
 
+  /// 记录用户批量选择的图片。
+  function handleBatchFilesChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    batchFiles = Array.from(input.files ?? []);
+  }
+
+  /// 记录用户选择的 zip 压缩包。
+  function handleArchiveChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    archiveFile = input.files?.[0] ?? null;
+  }
+
   /// 上传图片并刷新 manifest。
   async function submitUpload() {
     if (!manifest || !selectedFile) return;
@@ -110,6 +134,38 @@
       error = err instanceof Error ? err.message : '上传失败';
     } finally {
       uploading = false;
+    }
+  }
+
+  /// 批量上传图片或 zip 压缩包并刷新 manifest。
+  async function submitBatchUpload() {
+    if (!manifest) return;
+    error = '';
+    notice = '';
+
+    if (batchFiles.length === 0 && !archiveFile) {
+      error = '请选择图片或 zip 压缩包';
+      return;
+    }
+    if (batchTooLarge) {
+      error = '批量上传总体积不能超过 10MB';
+      return;
+    }
+
+    batchUploading = true;
+
+    try {
+      manifest = await uploadIconsBatch(manifest.id, batchFiles, archiveFile);
+      batchFiles = [];
+      archiveFile = null;
+      if (batchFilesInput) batchFilesInput.value = '';
+      if (archiveInput) archiveInput.value = '';
+      renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
+      notice = '批量图片已上传到 GitHub';
+    } catch (err) {
+      error = err instanceof Error ? err.message : '批量上传失败';
+    } finally {
+      batchUploading = false;
     }
   }
 
@@ -176,7 +232,14 @@
   /// 返回图标名称校验失败时的展示文案。
   function iconNameError(value: string) {
     if (value.endsWith(' ')) return '图标名称最后不能是空格';
-    return '图标名称只能包含英文字母、空格和 .、-、_';
+    return '图标名称只能包含英文字母、数字、空格和 .、-、_';
+  }
+
+  /// 格式化文件体积。
+  function formatBytes(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   onMount(async () => {
@@ -200,15 +263,33 @@
   </nav>
 
   <section class="set-admin-hero panel panel-pad">
-    <div>
+    <div class="hero-copy">
       <span class="eyebrow">Admin / {manifest.id}</span>
       <h1>{manifest.name}</h1>
       <p>{manifest.icons.length} icons · manifest.json</p>
+
+      <div class="hero-actions">
+        <a class="action secondary" href={`/sets/${manifest.id}`}>查看前台</a>
+        <a class="action secondary" href="/admin">返回后台</a>
+      </div>
     </div>
-    <div class="hero-actions">
-      <a class="action secondary" href={`/sets/${manifest.id}`}>查看前台</a>
-      <a class="action secondary" href="/admin">返回后台</a>
-    </div>
+
+    <form class="hero-meta-form" on:submit|preventDefault={submitMeta}>
+      <div class="hero-meta-head">
+        <span class="eyebrow">Manifest Meta</span>
+        <button class="action" type="submit" disabled={savingMeta}>
+          {savingMeta ? '保存中...' : '保存信息'}
+        </button>
+      </div>
+      <label class="field">
+        <span>名称</span>
+        <input class="input" bind:value={metaForm.name} />
+      </label>
+      <label class="field">
+        <span>描述</span>
+        <textarea class="textarea hero-textarea" bind:value={metaForm.description}></textarea>
+      </label>
+    </form>
   </section>
 
   {#if error}
@@ -219,22 +300,6 @@
   {/if}
 
   <section class="manage-grid">
-    <form class="panel panel-pad meta-card" on:submit|preventDefault={submitMeta}>
-      <span class="eyebrow">Manifest Meta</span>
-      <h2>集合信息</h2>
-      <label class="field">
-        <span>名称</span>
-        <input class="input" bind:value={metaForm.name} />
-      </label>
-      <label class="field">
-        <span>描述</span>
-        <textarea class="textarea" bind:value={metaForm.description}></textarea>
-      </label>
-      <button class="action" type="submit" disabled={savingMeta}>
-        {savingMeta ? '保存中...' : '保存信息'}
-      </button>
-    </form>
-
     <form class="panel panel-pad upload-card" on:submit|preventDefault={submitUpload}>
       <span class="eyebrow">Upload</span>
       <h2>上传图片</h2>
@@ -244,11 +309,11 @@
           class="input"
           bind:value={uploadName}
           maxlength="120"
-          pattern="[A-Za-z ._-]*"
+          pattern="[A-Za-z0-9 ._-]*"
           placeholder="留空则从文件名提取"
-          title="只能包含英文字母、空格和 .、-、_"
+          title="只能包含英文字母、数字、空格和 .、-、_"
         />
-        <small>只允许英文字母、空格和 .、-、_</small>
+        <small>只允许英文字母、数字、空格和 .、-、_</small>
       </label>
       <label class="file-drop">
         <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" on:change={handleFileChange} />
@@ -257,6 +322,42 @@
       </label>
       <button class="action" type="submit" disabled={uploading || !selectedFile}>
         {uploading ? '上传中...' : '上传到 GitHub'}
+      </button>
+    </form>
+
+    <form class="panel panel-pad batch-card" on:submit|preventDefault={submitBatchUpload}>
+      <span class="eyebrow">Batch Upload</span>
+      <h2>批量上传</h2>
+      <label class="file-drop">
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          multiple
+          bind:this={batchFilesInput}
+          on:change={handleBatchFilesChange}
+        />
+        <strong>{batchFiles.length > 0 ? `${batchFiles.length} 个图片文件` : '多选图片文件'}</strong>
+        <span>支持 png / jpg / webp / svg</span>
+      </label>
+      <label class="file-drop">
+        <input
+          type="file"
+          accept=".zip,application/zip"
+          bind:this={archiveInput}
+          on:change={handleArchiveChange}
+        />
+        <strong>{archiveFile ? archiveFile.name : '选择 zip 压缩包'}</strong>
+        <span>从压缩包内图片文件名生成 name</span>
+      </label>
+      <div class:over-limit={batchTooLarge} class="batch-total">
+        总体积 {formatBytes(batchTotalBytes)} / 10 MB
+      </div>
+      <button
+        class="action"
+        type="submit"
+        disabled={batchUploading || batchTooLarge || (batchFiles.length === 0 && !archiveFile)}
+      >
+        {batchUploading ? '批量上传中...' : '批量上传到 GitHub'}
       </button>
     </form>
   </section>
@@ -285,8 +386,8 @@
                 class="input"
                 bind:value={renameDrafts[icon.id]}
                 maxlength="120"
-                pattern="[A-Za-z ._-]+"
-                title="只能包含英文字母、空格和 .、-、_"
+                pattern="[A-Za-z0-9 ._-]+"
+                title="只能包含英文字母、数字、空格和 .、-、_"
               />
             </label>
             <code>{icon.path}</code>
@@ -328,10 +429,42 @@
 
 <style>
   .set-admin-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 0.64fr);
+    gap: clamp(24px, 4vw, 56px);
+    align-items: stretch;
+  }
+
+  .hero-copy {
     display: flex;
-    align-items: end;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .hero-meta-form {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    min-width: 0;
+    padding-left: clamp(18px, 3vw, 34px);
+    border-left: 1px solid rgba(246, 239, 217, 0.14);
+  }
+
+  .hero-meta-head {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    gap: 18px;
+    gap: 12px;
+  }
+
+  .hero-meta-head .action {
+    min-height: 40px;
+    padding: 9px 14px;
+    box-shadow: none;
+  }
+
+  .hero-textarea {
+    min-height: 92px;
   }
 
   h1,
@@ -365,14 +498,21 @@
     gap: 12px;
   }
 
-  .manage-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.7fr);
-    gap: 18px;
+  .hero-actions {
+    justify-content: flex-start;
+    margin-top: auto;
+    padding-top: 28px;
   }
 
-  .meta-card,
+  .manage-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    align-items: stretch;
+  }
+
   .upload-card,
+  .batch-card,
   .icon-manager {
     display: grid;
     gap: 18px;
@@ -409,6 +549,15 @@
 
   .file-drop span {
     color: rgba(246, 239, 217, 0.58);
+  }
+
+  .batch-total {
+    color: rgba(246, 239, 217, 0.68);
+    font-size: 13px;
+  }
+
+  .batch-total.over-limit {
+    color: #ff6b4a;
   }
 
   .admin-icon-grid {
@@ -455,6 +604,35 @@
     .icon-actions {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    .set-admin-hero {
+      grid-template-columns: 1fr;
+    }
+
+    .hero-meta-form {
+      padding-left: 0;
+      padding-top: 20px;
+      border-top: 1px solid rgba(246, 239, 217, 0.14);
+      border-left: 0;
+    }
+
+    .hero-meta-head {
+      display: contents;
+    }
+
+    .hero-meta-head .eyebrow {
+      order: 0;
+    }
+
+    .hero-meta-form > .field {
+      order: 1;
+    }
+
+    .hero-meta-head .action {
+      order: 2;
+      width: 100%;
+      margin-top: 6px;
     }
 
     .manage-grid {
