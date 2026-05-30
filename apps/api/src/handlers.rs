@@ -18,6 +18,7 @@ use crate::{
 };
 
 const SETS_INDEX_PATH: &str = "sets.json";
+const ICON_NAME_MAX_LEN: usize = 120;
 
 /// 返回健康检查状态。
 pub async fn health() -> Json<serde_json::Value> {
@@ -255,9 +256,11 @@ pub async fn upload_icon(
         Some(value) if !value.trim().is_empty() => validate_icon_name(&value)?,
         _ => filename_stem(&upload.file_name),
     };
-    let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
     let icon_id = Uuid::new_v4().to_string();
-    let path = unique_icon_path(&state, &set_id, &name, &extension, &icon_id).await?;
+    let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
+    let (name, path) =
+        unique_icon_name_and_path(&state, &manifest, &set_id, &name, &extension, None, None)
+            .await?;
 
     state
         .github
@@ -291,12 +294,45 @@ pub async fn rename_icon(
 ) -> AppResult<Json<IconManifest>> {
     validate_set_id(&set_id)?;
 
-    let name = validate_icon_name(&payload.name)?;
     let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
-    let Some(icon) = manifest.icons.iter_mut().find(|icon| icon.id == icon_id) else {
+    let Some(icon_position) = manifest.icons.iter().position(|icon| icon.id == icon_id) else {
         return Err(AppError::NotFound);
     };
+    let current_icon = manifest.icons[icon_position].clone();
+    let requested_name = validate_icon_name(&payload.name)?;
+    let extension = icon_extension(&current_icon.path)?;
+    let (name, path) = unique_icon_name_and_path(
+        &state,
+        &manifest,
+        &set_id,
+        &requested_name,
+        &extension,
+        Some(&icon_id),
+        Some(&current_icon.path),
+    )
+    .await?;
+    let url = state.github.raw_url(&path);
+    let path_changed = current_icon.path != path;
+
+    if path_changed {
+        let Some(file) = state.github.get_file(&current_icon.path).await? else {
+            return Err(AppError::NotFound);
+        };
+        state
+            .github
+            .put_file(
+                &path,
+                &file.content,
+                &format!("Rename icon file {name}"),
+                None,
+            )
+            .await?;
+    }
+
+    let icon = &mut manifest.icons[icon_position];
     icon.name = name;
+    icon.path = path;
+    icon.url = url;
     manifest.updated_at = now_iso();
     sort_icons(&mut manifest.icons);
 
@@ -308,6 +344,14 @@ pub async fn rename_icon(
     )
     .await?;
     sync_set_summary(&state, &manifest).await?;
+    if path_changed {
+        delete_github_file_if_exists(
+            &state,
+            &current_icon.path,
+            &format!("Delete old icon file {}", current_icon.name),
+        )
+        .await?;
+    }
 
     Ok(Json(manifest))
 }
@@ -512,23 +556,23 @@ fn validate_required_text(value: &str, field_name: &str, max_len: usize) -> AppR
     Ok(trimmed.to_string())
 }
 
-/// 校验图标名称只能包含英文字母、空格和 .-_。
+/// 校验图标名称只能包含英文字母、数字、空格和 .-_。
 fn validate_icon_name(value: &str) -> AppResult<String> {
     if value.ends_with(' ') {
         return Err(AppError::BadRequest("图标名称最后不能是空格".to_string()));
     }
 
-    let name = validate_required_text(value, "图标名称", 120)?;
+    let name = validate_required_text(value, "图标名称", ICON_NAME_MAX_LEN)?;
     let valid = name
         .bytes()
-        .all(|byte| byte.is_ascii_alphabetic() || matches!(byte, b' ' | b'.' | b'-' | b'_'));
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b' ' | b'.' | b'-' | b'_'));
 
     if valid {
         return Ok(name);
     }
 
     Err(AppError::BadRequest(
-        "图标名称只能包含英文字母、空格和 .、-、_".to_string(),
+        "图标名称只能包含英文字母、数字、空格和 .、-、_".to_string(),
     ))
 }
 
@@ -604,7 +648,7 @@ fn sanitize_icon_name(value: &str) -> Option<String> {
     let mut name = String::new();
 
     for ch in value.trim().chars() {
-        if ch.is_ascii_alphabetic() || matches!(ch, ' ' | '.' | '-' | '_') {
+        if ch.is_ascii_alphanumeric() || matches!(ch, ' ' | '.' | '-' | '_') {
             name.push(ch);
         }
     }
@@ -644,27 +688,92 @@ mod tests {
     #[test]
     fn validate_icon_name_allows_only_letters_spaces_and_safe_symbols() {
         assert_eq!(
-            validate_icon_name("  Emby Room._-").unwrap(),
-            "Emby Room._-"
+            validate_icon_name("  Emby Room 2._-").unwrap(),
+            "Emby Room 2._-"
         );
 
         assert!(validate_icon_name("Emby Room ").is_err());
-        assert!(validate_icon_name("Emby2").is_err());
         assert!(validate_icon_name("Emby/Room").is_err());
         assert!(validate_icon_name("Emby中文").is_err());
         assert!(validate_icon_name("Emby\tRoom").is_err());
     }
+
+    #[test]
+    fn numbered_icon_name_appends_two_digit_suffix() {
+        assert_eq!(numbered_icon_name("xx", 0), "xx");
+        assert_eq!(numbered_icon_name("xx", 1), "xx_01");
+        assert_eq!(numbered_icon_name("xx", 12), "xx_12");
+    }
+
+    #[test]
+    fn icon_path_uses_slugified_name() {
+        assert_eq!(icon_path("emby", "jack", "png"), "sets/emby/icons/jack.png");
+        assert_eq!(
+            icon_path("emby", "feiyue_caihong", "png"),
+            "sets/emby/icons/feiyue-caihong.png"
+        );
+        assert_eq!(icon_path("emby", "fych", "png"), "sets/emby/icons/fych.png");
+    }
 }
 
-/// 生成不会与仓库现有文件冲突的图片路径。
-async fn unique_icon_path(
+/// 生成集合内唯一的图标名称和图片路径。
+async fn unique_icon_name_and_path(
     state: &AppState,
+    manifest: &IconManifest,
     set_id: &str,
-    name: &str,
+    requested_name: &str,
     extension: &str,
-    icon_id: &str,
-) -> AppResult<String> {
-    let base_slug = {
+    current_icon_id: Option<&str>,
+    current_path: Option<&str>,
+) -> AppResult<(String, String)> {
+    let mut index = 0;
+
+    loop {
+        let candidate_name = numbered_icon_name(requested_name, index);
+        let candidate_path = icon_path(set_id, &candidate_name, extension);
+        let name_exists = manifest.icons.iter().any(|icon| {
+            Some(icon.id.as_str()) != current_icon_id
+                && icon.name.eq_ignore_ascii_case(&candidate_name)
+        });
+        let path_exists = if Some(candidate_path.as_str()) == current_path {
+            false
+        } else {
+            state.github.get_file(&candidate_path).await?.is_some()
+        };
+
+        if !name_exists && !path_exists {
+            return Ok((candidate_name, candidate_path));
+        }
+
+        index += 1;
+    }
+}
+
+/// 按 xx、xx_01、xx_02 的规则生成候选图标名称。
+fn numbered_icon_name(base_name: &str, index: usize) -> String {
+    if index == 0 {
+        return base_name.to_string();
+    }
+
+    let suffix = format!("_{index:02}");
+    let max_base_len = ICON_NAME_MAX_LEN.saturating_sub(suffix.chars().count());
+    let mut base = base_name
+        .chars()
+        .take(max_base_len)
+        .collect::<String>()
+        .trim_end()
+        .to_string();
+
+    if base.is_empty() {
+        base = "icon".to_string();
+    }
+
+    format!("{base}{suffix}")
+}
+
+/// 生成图标图片在仓库中的路径。
+fn icon_path(set_id: &str, name: &str, extension: &str) -> String {
+    let slug = {
         let slug = slugify(name);
         if slug.is_empty() {
             "icon".to_string()
@@ -672,13 +781,19 @@ async fn unique_icon_path(
             slug
         }
     };
-    let mut path = format!("sets/{set_id}/icons/{base_slug}.{extension}");
 
-    // GitHub 创建文件时不能覆盖已有路径，冲突时使用短 ID 后缀兜底。
-    if state.github.get_file(&path).await?.is_some() {
-        let short_id = icon_id.chars().take(8).collect::<String>();
-        path = format!("sets/{set_id}/icons/{base_slug}-{short_id}.{extension}");
-    }
+    format!("sets/{set_id}/icons/{slug}.{extension}")
+}
 
-    Ok(path)
+/// 从已有图标路径里提取图片扩展名。
+fn icon_extension(path: &str) -> AppResult<String> {
+    let extension = path
+        .rsplit('/')
+        .next()
+        .unwrap_or(path)
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_lowercase())
+        .filter(|extension| is_allowed_extension(extension));
+
+    extension.ok_or_else(|| AppError::BadRequest("无法识别原图片扩展名".to_string()))
 }
