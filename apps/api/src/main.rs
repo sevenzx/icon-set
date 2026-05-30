@@ -1,4 +1,5 @@
 mod auth;
+mod cleanup;
 mod config;
 mod error;
 mod github;
@@ -47,6 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         login_rate_limits: middleware::new_login_rate_limit_store(),
         duplicate_submissions: middleware::new_duplicate_submission_store(),
     };
+    cleanup::spawn_cleanup_task(state.clone());
     let app = build_router(state)?;
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
 

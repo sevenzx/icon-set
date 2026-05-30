@@ -26,6 +26,18 @@ pub fn new_duplicate_submission_store() -> DuplicateSubmissionStore {
     Arc::new(RwLock::new(HashMap::new()))
 }
 
+/// 清理已经过期的重复提交记录。
+pub async fn cleanup_expired_duplicate_submissions(state: &AppState) -> usize {
+    let now = Instant::now();
+    let mut submissions = state.duplicate_submissions.write().await;
+    let before = submissions.len();
+
+    submissions.retain(|_, created_at| {
+        now.saturating_duration_since(*created_at) < DUPLICATE_SUBMIT_WINDOW
+    });
+    before.saturating_sub(submissions.len())
+}
+
 /// 防重复提交：短时间内相同会话、相同路径、相同请求体只允许通过一次。
 pub async fn prevent_duplicate_submit(
     State(state): State<AppState>,

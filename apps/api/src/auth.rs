@@ -60,6 +60,16 @@ pub async fn destroy_session(state: &AppState, headers: &HeaderMap) {
     }
 }
 
+/// 清理已经过期的管理员会话。
+pub async fn cleanup_expired_sessions(state: &AppState) -> usize {
+    let now = SystemTime::now();
+    let mut sessions = state.sessions.write().await;
+    let before = sessions.len();
+
+    sessions.retain(|_, record| record.expires_at > now);
+    before.saturating_sub(sessions.len())
+}
+
 /// 检查当前请求是否包含有效管理员会话。
 pub async fn is_authenticated(state: &AppState, headers: &HeaderMap) -> bool {
     let Some(token) = read_session_cookie(headers, &state.config.session_cookie_name) else {

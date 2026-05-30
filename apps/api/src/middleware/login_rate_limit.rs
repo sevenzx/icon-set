@@ -29,6 +29,18 @@ pub fn new_login_rate_limit_store() -> LoginRateLimitStore {
     Arc::new(RwLock::new(HashMap::new()))
 }
 
+/// 清理已经过期的登录限流记录。
+pub async fn cleanup_expired_login_rate_limits(state: &AppState) -> usize {
+    let now = Instant::now();
+    let mut records = state.login_rate_limits.write().await;
+    let before = records.len();
+
+    records.retain(|_, record| {
+        now.saturating_duration_since(record.window_started_at) < LOGIN_LIMIT_WINDOW
+    });
+    before.saturating_sub(records.len())
+}
+
 /// 登录接口限流：同一来源在窗口期内失败过多时拒绝继续尝试。
 pub async fn limit_login(
     State(state): State<AppState>,
