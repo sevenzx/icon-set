@@ -3,13 +3,14 @@ mod config;
 mod error;
 mod github;
 mod handlers;
+mod middleware;
 mod models;
 
 use axum::{
     Router,
     extract::DefaultBodyLimit,
     http::{HeaderName, HeaderValue, Method, header},
-    middleware,
+    middleware as axum_middleware,
     routing::{get, patch, post},
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -80,9 +81,9 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
             "/sets/{set_id}/icons/{icon_id}",
             patch(handlers::rename_icon).delete(handlers::delete_icon),
         )
-        .route_layer(middleware::from_fn_with_state(
+        .route_layer(axum_middleware::from_fn_with_state(
             state.clone(),
-            auth::require_admin_middleware,
+            middleware::require_admin,
         ));
 
     let app = Router::new()

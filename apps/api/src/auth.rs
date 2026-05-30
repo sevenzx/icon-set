@@ -4,12 +4,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use axum::{
-    extract::{Request, State},
-    http::{HeaderMap, HeaderValue, header},
-    middleware::Next,
-    response::Response,
-};
+use axum::http::{HeaderMap, HeaderValue, header};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -105,18 +100,6 @@ pub async fn require_admin_access(state: &AppState, headers: &HeaderMap) -> AppR
     }
 
     Err(AppError::Unauthorized)
-}
-
-/// Admin 路由统一鉴权中间件。
-pub async fn require_admin_middleware(
-    State(state): State<AppState>,
-    request: Request,
-    next: Next,
-) -> AppResult<Response> {
-    let headers = request.headers().clone();
-    require_admin_access(&state, &headers).await?;
-
-    Ok(next.run(request).await)
 }
 
 /// 用固定时间比较降低密码长度相同时的计时侧信道。
