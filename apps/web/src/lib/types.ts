@@ -23,6 +23,7 @@ export type IconManifest = {
 
 export type SessionResponse = {
   authenticated: boolean;
+  admin_token?: string;
 };
 
 export type CreateSetPayload = {

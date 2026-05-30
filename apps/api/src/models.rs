@@ -41,6 +41,8 @@ pub struct LoginRequest {
 #[derive(Debug, Serialize)]
 pub struct SessionResponse {
     pub authenticated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub admin_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

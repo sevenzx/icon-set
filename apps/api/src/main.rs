@@ -9,6 +9,7 @@ use axum::{
     Router,
     extract::DefaultBodyLimit,
     http::{HeaderName, HeaderValue, Method, header},
+    middleware,
     routing::{get, patch, post},
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -64,9 +65,25 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         ])
         .allow_headers([
             header::CONTENT_TYPE,
-            HeaderName::from_static("x-admin-password"),
+            HeaderName::from_static("x-admin-token"),
         ])
         .allow_credentials(true);
+
+    let admin_router = Router::new()
+        .route("/sets", post(handlers::create_set))
+        .route(
+            "/sets/{set_id}",
+            patch(handlers::update_set).delete(handlers::delete_set),
+        )
+        .route("/sets/{set_id}/icons", post(handlers::upload_icon))
+        .route(
+            "/sets/{set_id}/icons/{icon_id}",
+            patch(handlers::rename_icon).delete(handlers::delete_icon),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_admin_middleware,
+        ));
 
     let app = Router::new()
         .route("/api/health", get(handlers::health))
@@ -75,19 +92,7 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         .route("/api/auth/login", post(handlers::login))
         .route("/api/auth/logout", post(handlers::logout))
         .route("/api/auth/session", get(handlers::session))
-        .route("/api/admin/sets", post(handlers::create_set))
-        .route(
-            "/api/admin/sets/{set_id}",
-            patch(handlers::update_set).delete(handlers::delete_set),
-        )
-        .route(
-            "/api/admin/sets/{set_id}/icons",
-            post(handlers::upload_icon),
-        )
-        .route(
-            "/api/admin/sets/{set_id}/icons/{icon_id}",
-            patch(handlers::rename_icon).delete(handlers::delete_icon),
-        )
+        .nest("/api/admin", admin_router)
         .layer(DefaultBodyLimit::max(state.config.max_upload_bytes))
         .layer(TraceLayer::new_for_http())
         .layer(cors)

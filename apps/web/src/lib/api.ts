@@ -7,9 +7,9 @@ import type {
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
-const ADMIN_PASSWORD_STORAGE_KEY = 'icon-set-admin-password';
+const ADMIN_TOKEN_STORAGE_KEY = 'icon-set-admin-token';
 
-let adminPasswordMemory = '';
+let adminTokenMemory = '';
 
 export class ApiError extends Error {
   status: number;
@@ -54,58 +54,58 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-/// 发送管理员写请求，除 session cookie 外额外携带管理员密码。
+/// 发送管理员写请求，除 session cookie 外额外携带当前会话的写 token。
 async function adminRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  const password = readAdminPassword();
+  const adminToken = readAdminToken();
 
-  if (password) {
-    headers.set('X-Admin-Password', password);
+  if (adminToken) {
+    headers.set('X-Admin-Token', adminToken);
   }
 
   try {
     return await request<T>(path, { ...init, headers });
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      forgetAdminPassword();
+      forgetAdminToken();
     }
     throw error;
   }
 }
 
-/// 把管理员密码限制在当前浏览器标签页内，关闭标签页后自动失效。
-function rememberAdminPassword(password: string) {
-  adminPasswordMemory = password;
+/// 把当前会话写 token 限制在当前浏览器标签页内，关闭标签页后自动失效。
+function rememberAdminToken(adminToken: string) {
+  adminTokenMemory = adminToken;
   try {
-    window.sessionStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, password);
+    window.sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
   } catch {
-    // sessionStorage 不可用时，仍保留当前页面生命周期内的内存密码。
+    // sessionStorage 不可用时，仍保留当前页面生命周期内的内存 token。
   }
 }
 
-/// 清理当前标签页保存的管理员密码。
-function forgetAdminPassword() {
-  adminPasswordMemory = '';
+/// 清理当前标签页保存的会话写 token。
+function forgetAdminToken() {
+  adminTokenMemory = '';
   try {
-    window.sessionStorage.removeItem(ADMIN_PASSWORD_STORAGE_KEY);
+    window.sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
   } catch {
     // 忽略浏览器存储限制导致的清理失败。
   }
 }
 
-/// 读取当前标签页保存的管理员密码。
-function readAdminPassword() {
-  if (adminPasswordMemory) {
-    return adminPasswordMemory;
+/// 读取当前标签页保存的会话写 token。
+function readAdminToken() {
+  if (adminTokenMemory) {
+    return adminTokenMemory;
   }
 
   try {
-    adminPasswordMemory = window.sessionStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) ?? '';
+    adminTokenMemory = window.sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) ?? '';
   } catch {
-    adminPasswordMemory = '';
+    adminTokenMemory = '';
   }
 
-  return adminPasswordMemory;
+  return adminTokenMemory;
 }
 
 /// 从错误响应中提取可展示的错误文案。
@@ -135,8 +135,8 @@ export async function login(password: string) {
     body: JSON.stringify({ password })
   });
 
-  if (session.authenticated) {
-    rememberAdminPassword(password);
+  if (session.authenticated && session.admin_token) {
+    rememberAdminToken(session.admin_token);
   }
 
   return session;
@@ -147,7 +147,7 @@ export async function logout() {
   try {
     return await request<SessionResponse>('/api/auth/logout', { method: 'POST' });
   } finally {
-    forgetAdminPassword();
+    forgetAdminToken();
   }
 }
 
@@ -156,7 +156,7 @@ export async function getSession() {
   const session = await request<SessionResponse>('/api/auth/session');
 
   return {
-    authenticated: session.authenticated && Boolean(readAdminPassword())
+    authenticated: session.authenticated && Boolean(readAdminToken())
   };
 }
 

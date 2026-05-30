@@ -4,7 +4,12 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use axum::http::{HeaderMap, HeaderValue, header};
+use axum::{
+    extract::{Request, State},
+    http::{HeaderMap, HeaderValue, header},
+    middleware::Next,
+    response::Response,
+};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -14,11 +19,17 @@ use crate::{
 };
 
 const SESSION_TTL: Duration = Duration::from_secs(60 * 60 * 24 * 7);
-const ADMIN_PASSWORD_HEADER: &str = "x-admin-password";
+const ADMIN_TOKEN_HEADER: &str = "x-admin-token";
 
 #[derive(Clone)]
 pub struct SessionRecord {
     pub expires_at: SystemTime,
+    pub admin_token: String,
+}
+
+pub struct CreatedSession {
+    pub cookie_token: String,
+    pub admin_token: String,
 }
 
 pub type SessionStore = Arc<RwLock<HashMap<String, SessionRecord>>>;
@@ -28,17 +39,23 @@ pub fn new_session_store() -> SessionStore {
     Arc::new(RwLock::new(HashMap::new()))
 }
 
-/// 创建新的管理员会话并返回会话 ID。
-pub async fn create_session(state: &AppState) -> String {
-    let token = Uuid::new_v4().to_string();
+/// 创建新的管理员会话并返回 Cookie token 和写 token。
+pub async fn create_session(state: &AppState) -> CreatedSession {
+    let cookie_token = Uuid::new_v4().to_string();
+    let admin_token = Uuid::new_v4().to_string();
     let expires_at = SystemTime::now() + SESSION_TTL;
-    state
-        .sessions
-        .write()
-        .await
-        .insert(token.clone(), SessionRecord { expires_at });
+    state.sessions.write().await.insert(
+        cookie_token.clone(),
+        SessionRecord {
+            expires_at,
+            admin_token: admin_token.clone(),
+        },
+    );
 
-    token
+    CreatedSession {
+        cookie_token,
+        admin_token,
+    }
 }
 
 /// 删除当前请求中的会话。
@@ -61,39 +78,53 @@ pub async fn is_authenticated(state: &AppState, headers: &HeaderMap) -> bool {
     sessions.contains_key(&token)
 }
 
-/// 要求当前请求已经登录管理员账号。
-pub async fn require_session(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
-    if is_authenticated(state, headers).await {
-        return Ok(());
-    }
-
-    Err(AppError::Unauthorized)
-}
-
-/// 要求当前请求同时具备管理员会话和管理员密码头。
+/// 要求当前请求同时具备管理员会话和当前会话的写 token。
 pub async fn require_admin_access(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
-    require_session(state, headers).await?;
-    require_admin_password(state, headers)
-}
-
-/// 校验请求头中的管理员密码。
-pub fn require_admin_password(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
-    let Some(password) = headers
-        .get(ADMIN_PASSWORD_HEADER)
+    let Some(cookie_token) = read_session_cookie(headers, &state.config.session_cookie_name) else {
+        return Err(AppError::Unauthorized);
+    };
+    let Some(admin_token) = headers
+        .get(ADMIN_TOKEN_HEADER)
         .and_then(|value| value.to_str().ok())
     else {
         return Err(AppError::Unauthorized);
     };
 
-    if password_matches(password, &state.config.admin_password) {
+    let now = SystemTime::now();
+    let mut sessions = state.sessions.write().await;
+
+    // 读取时顺手清理过期会话，避免长期运行时无界增长。
+    sessions.retain(|_, record| record.expires_at > now);
+
+    let Some(record) = sessions.get(&cookie_token) else {
+        return Err(AppError::Unauthorized);
+    };
+
+    if constant_time_eq(admin_token, &record.admin_token) {
         return Ok(());
     }
 
     Err(AppError::Unauthorized)
 }
 
+/// Admin 路由统一鉴权中间件。
+pub async fn require_admin_middleware(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> AppResult<Response> {
+    let headers = request.headers().clone();
+    require_admin_access(&state, &headers).await?;
+
+    Ok(next.run(request).await)
+}
+
 /// 用固定时间比较降低密码长度相同时的计时侧信道。
 pub fn password_matches(input: &str, expected: &str) -> bool {
+    constant_time_eq(input, expected)
+}
+
+fn constant_time_eq(input: &str, expected: &str) -> bool {
     let input = input.as_bytes();
     let expected = expected.as_bytes();
     let mut diff = input.len() ^ expected.len();

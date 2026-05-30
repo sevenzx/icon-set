@@ -49,10 +49,11 @@ pub async fn login(
         return Err(AppError::Unauthorized);
     }
 
-    let token = auth::create_session(&state).await;
-    let cookie = auth::session_cookie_value(&state, &token);
+    let session = auth::create_session(&state).await;
+    let cookie = auth::session_cookie_value(&state, &session.cookie_token);
     let mut response = Json(SessionResponse {
         authenticated: true,
+        admin_token: Some(session.admin_token),
     })
     .into_response();
     auth::set_cookie_header(response.headers_mut(), cookie)?;
@@ -66,6 +67,7 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> AppRes
     let cookie = auth::expired_session_cookie_value(&state);
     let mut response = Json(SessionResponse {
         authenticated: false,
+        admin_token: None,
     })
     .into_response();
     auth::set_cookie_header(response.headers_mut(), cookie)?;
@@ -77,17 +79,15 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> AppRes
 pub async fn session(State(state): State<AppState>, headers: HeaderMap) -> Json<SessionResponse> {
     Json(SessionResponse {
         authenticated: auth::is_authenticated(&state, &headers).await,
+        admin_token: None,
     })
 }
 
 /// 创建一个新的图标集合。
 pub async fn create_set(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(payload): Json<CreateSetRequest>,
 ) -> AppResult<Json<IconSetSummary>> {
-    auth::require_admin_access(&state, &headers).await?;
-
     let set_id = slugify(&payload.id);
     validate_set_id(&set_id)?;
     let name = validate_required_text(&payload.name, "集合名称", 120)?;
@@ -137,10 +137,8 @@ pub async fn create_set(
 pub async fn update_set(
     State(state): State<AppState>,
     Path(set_id): Path<String>,
-    headers: HeaderMap,
     Json(payload): Json<UpdateSetRequest>,
 ) -> AppResult<Json<IconSetSummary>> {
-    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let (mut sets, sets_sha) = load_sets(&state).await?;
@@ -183,9 +181,7 @@ pub async fn update_set(
 pub async fn delete_set(
     State(state): State<AppState>,
     Path(set_id): Path<String>,
-    headers: HeaderMap,
 ) -> AppResult<Json<Vec<IconSetSummary>>> {
-    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let (mut sets, sets_sha) = load_sets(&state).await?;
@@ -218,10 +214,8 @@ pub async fn delete_set(
 pub async fn upload_icon(
     State(state): State<AppState>,
     Path(set_id): Path<String>,
-    headers: HeaderMap,
     mut multipart: Multipart,
 ) -> AppResult<Json<IconManifest>> {
-    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let mut icon_name: Option<String> = None;
@@ -293,10 +287,8 @@ pub async fn upload_icon(
 pub async fn rename_icon(
     State(state): State<AppState>,
     Path((set_id, icon_id)): Path<(String, String)>,
-    headers: HeaderMap,
     Json(payload): Json<RenameIconRequest>,
 ) -> AppResult<Json<IconManifest>> {
-    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let name = validate_icon_name(&payload.name)?;
@@ -324,9 +316,7 @@ pub async fn rename_icon(
 pub async fn delete_icon(
     State(state): State<AppState>,
     Path((set_id, icon_id)): Path<(String, String)>,
-    headers: HeaderMap,
 ) -> AppResult<Json<IconManifest>> {
-    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
