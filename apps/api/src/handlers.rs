@@ -45,7 +45,7 @@ pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> AppResult<Response> {
-    if payload.password != state.config.admin_password {
+    if !auth::password_matches(&payload.password, &state.config.admin_password) {
         return Err(AppError::Unauthorized);
     }
 
@@ -86,7 +86,7 @@ pub async fn create_set(
     headers: HeaderMap,
     Json(payload): Json<CreateSetRequest>,
 ) -> AppResult<Json<IconSetSummary>> {
-    auth::require_session(&state, &headers).await?;
+    auth::require_admin_access(&state, &headers).await?;
 
     let set_id = slugify(&payload.id);
     validate_set_id(&set_id)?;
@@ -140,7 +140,7 @@ pub async fn update_set(
     headers: HeaderMap,
     Json(payload): Json<UpdateSetRequest>,
 ) -> AppResult<Json<IconSetSummary>> {
-    auth::require_session(&state, &headers).await?;
+    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let (mut sets, sets_sha) = load_sets(&state).await?;
@@ -185,7 +185,7 @@ pub async fn delete_set(
     Path(set_id): Path<String>,
     headers: HeaderMap,
 ) -> AppResult<Json<Vec<IconSetSummary>>> {
-    auth::require_session(&state, &headers).await?;
+    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let (mut sets, sets_sha) = load_sets(&state).await?;
@@ -221,7 +221,7 @@ pub async fn upload_icon(
     headers: HeaderMap,
     mut multipart: Multipart,
 ) -> AppResult<Json<IconManifest>> {
-    auth::require_session(&state, &headers).await?;
+    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let mut icon_name: Option<String> = None;
@@ -296,7 +296,7 @@ pub async fn rename_icon(
     headers: HeaderMap,
     Json(payload): Json<RenameIconRequest>,
 ) -> AppResult<Json<IconManifest>> {
-    auth::require_session(&state, &headers).await?;
+    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let name = validate_icon_name(&payload.name)?;
@@ -326,7 +326,7 @@ pub async fn delete_icon(
     Path((set_id, icon_id)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> AppResult<Json<IconManifest>> {
-    auth::require_session(&state, &headers).await?;
+    auth::require_admin_access(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;

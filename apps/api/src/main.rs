@@ -8,7 +8,7 @@ mod models;
 use axum::{
     Router,
     extract::DefaultBodyLimit,
-    http::{HeaderValue, Method, header},
+    http::{HeaderName, HeaderValue, Method, header},
     routing::{get, patch, post},
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -62,7 +62,10 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([header::CONTENT_TYPE])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            HeaderName::from_static("x-admin-password"),
+        ])
         .allow_credentials(true);
 
     let app = Router::new()

@@ -14,6 +14,7 @@ use crate::{
 };
 
 const SESSION_TTL: Duration = Duration::from_secs(60 * 60 * 24 * 7);
+const ADMIN_PASSWORD_HEADER: &str = "x-admin-password";
 
 #[derive(Clone)]
 pub struct SessionRecord {
@@ -69,6 +70,44 @@ pub async fn require_session(state: &AppState, headers: &HeaderMap) -> AppResult
     Err(AppError::Unauthorized)
 }
 
+/// 要求当前请求同时具备管理员会话和管理员密码头。
+pub async fn require_admin_access(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
+    require_session(state, headers).await?;
+    require_admin_password(state, headers)
+}
+
+/// 校验请求头中的管理员密码。
+pub fn require_admin_password(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
+    let Some(password) = headers
+        .get(ADMIN_PASSWORD_HEADER)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return Err(AppError::Unauthorized);
+    };
+
+    if password_matches(password, &state.config.admin_password) {
+        return Ok(());
+    }
+
+    Err(AppError::Unauthorized)
+}
+
+/// 用固定时间比较降低密码长度相同时的计时侧信道。
+pub fn password_matches(input: &str, expected: &str) -> bool {
+    let input = input.as_bytes();
+    let expected = expected.as_bytes();
+    let mut diff = input.len() ^ expected.len();
+    let max_len = input.len().max(expected.len());
+
+    for index in 0..max_len {
+        let left = input.get(index).copied().unwrap_or(0);
+        let right = expected.get(index).copied().unwrap_or(0);
+        diff |= usize::from(left ^ right);
+    }
+
+    diff == 0
+}
+
 /// 生成登录成功后的 Set-Cookie 值。
 pub fn session_cookie_value(state: &AppState, token: &str) -> String {
     let mut value = format!(
@@ -112,4 +151,17 @@ fn read_session_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String>
         let value = parts.next()?;
         (name == cookie_name).then(|| value.to_string())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::password_matches;
+
+    #[test]
+    fn password_matches_requires_exact_value() {
+        assert!(password_matches("secret", "secret"));
+        assert!(!password_matches("secret", "Secret"));
+        assert!(!password_matches("secret", "secret1"));
+        assert!(!password_matches("", "secret"));
+    }
 }

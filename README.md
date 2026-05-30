@@ -9,6 +9,7 @@
 - 前台浏览图标集合、搜索图标、复制图标 raw URL 和集合 manifest raw URL
 - 公开页面不展示后台入口，管理员直接访问 `/admin`
 - 管理后台支持创建 set、编辑集合信息、上传图片、修改图标 name、删除图标
+- 管理后台写接口同时校验 session cookie 和 `X-Admin-Password`，避免仅凭 cookie 调用后台写操作
 - 删除集合和删除图标使用二段式确认弹窗，需要输入目标 ID 或名称后才会执行
 - GitHub Token 只存在 Axum 后端环境变量中，前端不会接触写权限
 
