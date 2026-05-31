@@ -155,7 +155,7 @@
     height: 40px;
     place-items: center;
     border: 1px solid rgba(246, 239, 217, 0.2);
-    border-radius: 50%;
+    border-radius: 10px;
     color: #f6efd9;
     background: rgba(246, 239, 217, 0.06);
     font-size: 24px;
@@ -170,9 +170,9 @@
   h2 {
     margin: 0;
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: clamp(34px, 6vw, 62px);
-    line-height: 0.92;
-    letter-spacing: -0.06em;
+    font-size: 48px;
+    line-height: 0.96;
+    letter-spacing: 0;
   }
 
   p {
@@ -186,7 +186,7 @@
     gap: 8px;
     padding: 14px;
     border: 1px solid rgba(246, 239, 217, 0.14);
-    border-radius: 18px;
+    border-radius: 8px;
     background: rgba(246, 239, 217, 0.05);
   }
 
@@ -195,7 +195,7 @@
     color: rgba(246, 239, 217, 0.58);
     font-size: 12px;
     font-weight: 800;
-    letter-spacing: 0.08em;
+    letter-spacing: 0;
     text-transform: uppercase;
   }
 
@@ -238,6 +238,10 @@
     .modal-actions {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    h2 {
+      font-size: 36px;
     }
   }
 </style>

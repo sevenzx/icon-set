@@ -231,17 +231,17 @@
   h2 {
     margin: 0;
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: -0.06em;
+    letter-spacing: 0;
   }
 
   h1 {
     margin-top: 12px;
-    font-size: clamp(48px, 8vw, 104px);
-    line-height: 0.9;
+    font-size: 72px;
+    line-height: 0.94;
   }
 
   h2 {
-    font-size: clamp(32px, 4vw, 54px);
+    font-size: 42px;
   }
 
   p {
@@ -254,14 +254,14 @@
   .admin-grid {
     display: grid;
     grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
-    gap: 18px;
+    gap: 14px;
     align-items: start;
   }
 
   .create-card,
   .list-card {
     display: grid;
-    gap: 18px;
+    gap: 14px;
   }
 
   .form-actions,
@@ -284,7 +284,7 @@
     gap: 16px;
     padding: 16px;
     border: 1px solid rgba(246, 239, 217, 0.16);
-    border-radius: 20px;
+    border-radius: 8px;
     background: rgba(246, 239, 217, 0.04);
   }
 
@@ -296,7 +296,7 @@
   .set-row strong {
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
     font-size: 24px;
-    letter-spacing: -0.04em;
+    letter-spacing: 0;
   }
 
   .set-row span {
@@ -322,6 +322,14 @@
     .row-actions {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    h1 {
+      font-size: 48px;
+    }
+
+    h2 {
+      font-size: 34px;
     }
   }
 </style>

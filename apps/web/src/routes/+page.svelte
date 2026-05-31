@@ -71,8 +71,6 @@
   </div>
 
   <aside class="hero-card panel panel-pad">
-    <p>DATA SHAPE</p>
-    <code>{`sets/{id}/manifest.json`}</code>
     <strong>{sets.length}</strong>
     <span>active sets</span>
   </aside>
@@ -136,33 +134,16 @@
   .hero-card {
     align-self: end;
     display: grid;
-    gap: 12px;
-    min-height: 260px;
+    align-content: end;
+    gap: 14px;
+    min-height: 168px;
     border-color: rgba(198, 255, 72, 0.28);
   }
 
-  .hero-card p {
-    margin: 0;
-    color: rgba(246, 239, 217, 0.58);
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-  }
-
-  .hero-card code {
-    width: fit-content;
-    padding: 10px 12px;
-    border: 1px solid rgba(246, 239, 217, 0.16);
-    border-radius: 14px;
-    color: #c6ff48;
-    background: rgba(0, 0, 0, 0.3);
-  }
-
   .hero-card strong {
-    align-self: end;
     color: #ff5524;
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: 112px;
+    font-size: 82px;
     line-height: 0.8;
   }
 
@@ -174,37 +155,37 @@
     display: flex;
     align-items: end;
     justify-content: space-between;
-    gap: 18px;
+    gap: 14px;
   }
 
   h2,
   h3 {
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: -0.05em;
+    letter-spacing: 0;
   }
 
   h2 {
-    margin: 12px 0 0;
-    font-size: clamp(36px, 5vw, 68px);
+    margin: 10px 0 0;
+    font-size: 54px;
     line-height: 0.94;
   }
 
   .set-card {
     position: relative;
     display: grid;
-    min-height: 280px;
-    padding: 22px;
+    min-height: 230px;
+    padding: 18px;
     overflow: hidden;
     transition: border-color 180ms ease, background 180ms ease;
   }
 
   .set-card::before {
     position: absolute;
-    inset: auto -40px -80px auto;
-    width: 180px;
-    height: 180px;
-    border: 1px solid rgba(255, 85, 36, 0.36);
-    border-radius: 36% 64% 43% 57%;
+    inset: auto -46px -88px auto;
+    width: 150px;
+    height: 150px;
+    border: 1px solid rgba(255, 85, 36, 0.24);
+    border-radius: 8px;
     content: '';
     transform: rotate(20deg);
   }
@@ -222,36 +203,36 @@
 
   .set-mark {
     display: grid;
-    width: 72px;
-    height: 72px;
+    width: 54px;
+    height: 54px;
     place-items: center;
-    border-radius: 22px;
+    border-radius: 14px;
     color: #0c0d0b;
     background: #f6efd9;
-    box-shadow: 7px 7px 0 #ff5524;
+    box-shadow: 4px 4px 0 rgba(255, 85, 36, 0.86);
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: 28px;
+    font-size: 22px;
     font-weight: 800;
   }
 
   .set-id {
     position: absolute;
-    top: 24px;
-    right: 22px;
+    top: 18px;
+    right: 18px;
     color: rgba(198, 255, 72, 0.78);
     font-size: 12px;
   }
 
   .set-card h3 {
     align-self: end;
-    margin: 44px 0 8px;
-    font-size: 32px;
+    margin: 34px 0 8px;
+    font-size: 26px;
     line-height: 1;
   }
 
   .set-card p {
     display: -webkit-box;
-    min-height: 72px;
+    min-height: 54px;
     margin: 0;
     overflow: hidden;
     color: rgba(246, 239, 217, 0.66);
@@ -268,7 +249,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-top: 28px;
+    margin-top: 20px;
     color: rgba(246, 239, 217, 0.6);
     font-size: 13px;
   }
@@ -283,7 +264,7 @@
     min-height: 34px;
     padding: 0 12px;
     border: 1px solid rgba(246, 239, 217, 0.2);
-    border-radius: 999px;
+    border-radius: 10px;
     color: #f6efd9;
     background: rgba(246, 239, 217, 0.08);
     font-size: 12px;
@@ -310,7 +291,7 @@
 
   .empty h3 {
     margin: 0;
-    font-size: 42px;
+    font-size: 38px;
   }
 
   .empty p {
@@ -323,6 +304,10 @@
     .section-head {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    h2 {
+      font-size: 40px;
     }
   }
 </style>

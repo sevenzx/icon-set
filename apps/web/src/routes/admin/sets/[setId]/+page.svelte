@@ -428,7 +428,7 @@
   .set-admin-hero {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(380px, 0.64fr);
-    gap: clamp(24px, 4vw, 56px);
+    gap: 32px;
     align-items: stretch;
   }
 
@@ -443,7 +443,7 @@
     gap: 14px;
     align-content: start;
     min-width: 0;
-    padding-left: clamp(18px, 3vw, 34px);
+    padding-left: 28px;
     border-left: 1px solid rgba(246, 239, 217, 0.14);
   }
 
@@ -468,17 +468,17 @@
   h2 {
     margin: 0;
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: -0.06em;
+    letter-spacing: 0;
   }
 
   h1 {
     margin-top: 12px;
-    font-size: clamp(44px, 8vw, 96px);
-    line-height: 0.9;
+    font-size: 72px;
+    line-height: 0.94;
   }
 
   h2 {
-    font-size: clamp(30px, 4vw, 52px);
+    font-size: 42px;
   }
 
   p {
@@ -504,7 +504,7 @@
   .manage-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
+    gap: 14px;
     align-items: stretch;
   }
 
@@ -512,7 +512,7 @@
   .batch-card,
   .icon-manager {
     display: grid;
-    gap: 18px;
+    gap: 14px;
   }
 
   .field small {
@@ -526,7 +526,7 @@
     place-items: center;
     padding: 20px;
     border: 1px dashed rgba(198, 255, 72, 0.42);
-    border-radius: 24px;
+    border-radius: 8px;
     background: rgba(198, 255, 72, 0.06);
     text-align: center;
   }
@@ -568,7 +568,7 @@
     gap: 12px;
     padding: 14px;
     border: 1px solid rgba(246, 239, 217, 0.16);
-    border-radius: 22px;
+    border-radius: 8px;
     background: rgba(246, 239, 217, 0.04);
   }
 
@@ -576,7 +576,7 @@
     display: grid;
     min-height: 160px;
     place-items: center;
-    border-radius: 18px;
+    border-radius: 8px;
     background: rgba(0, 0, 0, 0.22);
   }
 
@@ -634,6 +634,14 @@
 
     .manage-grid {
       grid-template-columns: 1fr;
+    }
+
+    h1 {
+      font-size: 48px;
+    }
+
+    h2 {
+      font-size: 34px;
     }
   }
 </style>

@@ -13,6 +13,7 @@
   let query = '';
   let copiedUrl = '';
   let failedUrl = '';
+  let previewIcon: IconEntry | null = null;
 
   $: filteredIcons = filterIcons(manifest?.icons ?? [], query);
   $: manifestUrl = manifest ? manifestRawUrl(manifest.id) : '';
@@ -66,10 +67,37 @@
     }
   }
 
+  function openPreview(icon: IconEntry) {
+    previewIcon = icon;
+  }
+
+  function closePreview() {
+    previewIcon = null;
+  }
+
+  function copyPreviewUrl() {
+    if (!previewIcon) return;
+    void copyUrl(previewIcon.url);
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && previewIcon) {
+      closePreview();
+    }
+  }
+
+  function handlePreviewBackdropClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      closePreview();
+    }
+  }
+
   onMount(() => {
     void refreshManifest();
   });
 </script>
+
+<svelte:window on:keydown={handleKeydown} />
 
 {#if loading}
   <div class="notice">正在读取 manifest.json...</div>
@@ -91,7 +119,7 @@
     <div class="hero-side">
       <div class="stat-stack">
         <strong>{manifest.icons.length}</strong>
-        <span>icons in manifest</span>
+        <span>icons</span>
       </div>
       <button class="action secondary manifest-copy" type="button" on:click={() => copyUrl(manifestUrl)}>
         {#if copiedUrl === manifestUrl}
@@ -108,12 +136,8 @@
   <section class="toolbar panel panel-pad">
     <label class="field search-field">
       <span>搜索图标</span>
-      <input class="input" bind:value={query} placeholder="输入名称，例如 Emby" />
+      <input class="input" bind:value={query} placeholder="输入名称" />
     </label>
-    <div class="result-count" aria-live="polite">
-      <strong>{filteredIcons.length}</strong>
-      <span>/ {manifest.icons.length} icons</span>
-    </div>
   </section>
 
   {#if filteredIcons.length === 0}
@@ -122,122 +146,186 @@
     <section class="icon-grid">
       {#each filteredIcons as icon}
         <article class="icon-card panel">
+          <button
+            class:copied={copiedUrl === icon.url}
+            class:failed={failedUrl === icon.url}
+            class="copy-url"
+            type="button"
+            aria-label={`复制 ${icon.name} 的 Raw URL`}
+            title="复制 Raw URL"
+            on:click={() => copyUrl(icon.url)}
+          >
+            {#if copiedUrl === icon.url}
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 12 4 4L19 6" />
+              </svg>
+            {:else if failedUrl === icon.url}
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 7v6" />
+                <path d="M12 17h.01" />
+              </svg>
+            {:else}
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="8" y="8" width="10" height="10" rx="2" />
+                <path d="M6 14H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1" />
+              </svg>
+            {/if}
+          </button>
           <div class="icon-stage">
-            <img src={icon.url} alt={icon.name} loading="lazy" />
+            <button
+              class="image-preview-button"
+              type="button"
+              aria-label={`查看 ${icon.name} 大图`}
+              title="查看大图"
+              on:click={() => openPreview(icon)}
+            >
+              <img src={icon.url} alt={icon.name} loading="lazy" />
+            </button>
           </div>
           <div class="icon-meta">
             <h2>{icon.name}</h2>
             <code>{icon.path || icon.url}</code>
           </div>
-          <button class="action secondary" type="button" on:click={() => copyUrl(icon.url)}>
-            {#if copiedUrl === icon.url}
-              已复制
-            {:else if failedUrl === icon.url}
-              复制失败
-            {:else}
-              复制 Raw URL
-            {/if}
-          </button>
         </article>
       {/each}
     </section>
   {/if}
 {/if}
 
+{#if previewIcon}
+  <div class="image-preview-backdrop" role="presentation" on:click={handlePreviewBackdropClick}>
+    <div
+      class="image-preview"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="image-preview-title"
+    >
+      <header>
+        <div>
+          <span class="eyebrow">Preview</span>
+          <h2 id="image-preview-title">{previewIcon.name}</h2>
+        </div>
+        <button class="preview-close" type="button" aria-label="关闭大图预览" on:click={closePreview}>
+          ×
+        </button>
+      </header>
+
+      <div class="preview-stage">
+        <img src={previewIcon.url} alt={previewIcon.name} />
+      </div>
+
+      <footer>
+        <code>{previewIcon.path || previewIcon.url}</code>
+        <button class="action secondary" type="button" on:click={copyPreviewUrl}>
+          {copiedUrl === previewIcon.url ? '已复制' : '复制 Raw URL'}
+        </button>
+      </footer>
+    </div>
+  </div>
+{/if}
+
 <style>
   .set-hero {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.36fr);
+    gap: 18px;
     overflow: hidden;
   }
 
   h1 {
     max-width: 900px;
-    margin: 14px 0 0;
+    margin: 12px 0 0;
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: clamp(44px, 8vw, 104px);
-    line-height: 0.9;
-    letter-spacing: -0.07em;
+    font-size: 64px;
+    line-height: 0.94;
+    letter-spacing: 0;
   }
 
   .set-hero p {
     max-width: 780px;
-    margin: 18px 0 0;
-    color: rgba(246, 239, 217, 0.72);
-    line-height: 1.8;
+    margin: 14px 0 0;
+    color: rgba(246, 239, 217, 0.68);
+    line-height: 1.7;
   }
 
   .hero-side {
     display: grid;
-    gap: 14px;
-    min-width: 220px;
-    align-self: stretch;
+    gap: 10px;
+    min-width: 0;
+    align-content: end;
   }
 
   .stat-stack {
+    position: relative;
     display: grid;
-    place-items: center;
+    grid-template-rows: auto 1fr auto;
+    min-height: 116px;
+    padding: 16px 18px;
+    overflow: hidden;
     align-self: stretch;
     border: 1px solid rgba(198, 255, 72, 0.28);
-    border-radius: 24px;
-    background: rgba(198, 255, 72, 0.08);
+    border-radius: 14px;
+    background:
+      linear-gradient(135deg, rgba(255, 85, 36, 0.055), transparent 42%),
+      rgba(198, 255, 72, 0.055);
+  }
+
+  .stat-stack::after {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 44px;
+    border-top: 1px solid rgba(198, 255, 72, 0.24);
+    content: '';
   }
 
   .stat-stack strong {
+    z-index: 1;
+    justify-self: start;
+    align-self: start;
     color: #ff5524;
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: 74px;
-    line-height: 0.9;
+    font-size: 60px;
+    line-height: 0.82;
   }
 
   .stat-stack span {
-    max-width: 130px;
+    z-index: 1;
+    justify-self: end;
+    align-self: end;
+    max-width: 150px;
     color: rgba(246, 239, 217, 0.62);
-    text-align: center;
+    font-size: 14px;
+    text-align: right;
   }
 
   .manifest-copy {
     width: 100%;
-    min-height: 46px;
+    min-height: 40px;
   }
 
   .toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 14px;
   }
 
   .search-field {
     flex: 1;
   }
 
-  .result-count {
-    display: grid;
-    min-width: 120px;
-    justify-items: end;
-    color: rgba(246, 239, 217, 0.58);
-    font-size: 12px;
-  }
-
-  .result-count strong {
-    color: #c6ff48;
-    font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: 34px;
-    line-height: 0.9;
-  }
-
   .icon-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 14px;
   }
 
   .icon-card {
+    position: relative;
     display: grid;
-    gap: 14px;
-    padding: 14px;
+    gap: 12px;
+    padding: 12px;
     transition: border-color 160ms ease, background 160ms ease;
   }
 
@@ -246,12 +334,57 @@
     background: rgba(24, 26, 20, 0.82);
   }
 
+  .copy-url {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 2;
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 1px solid rgba(246, 239, 217, 0.18);
+    border-radius: 10px;
+    color: rgba(246, 239, 217, 0.72);
+    background: rgba(12, 13, 11, 0.78);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+  }
+
+  .copy-url:hover,
+  .copy-url:focus-visible {
+    border-color: rgba(198, 255, 72, 0.55);
+    color: #c6ff48;
+    background: rgba(24, 26, 20, 0.92);
+    outline: none;
+  }
+
+  .copy-url.copied {
+    border-color: rgba(198, 255, 72, 0.62);
+    color: #c6ff48;
+  }
+
+  .copy-url.failed {
+    border-color: rgba(255, 85, 36, 0.62);
+    color: #ff5524;
+  }
+
+  .copy-url svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
   .icon-stage {
     display: grid;
-    min-height: 170px;
+    min-height: 132px;
     place-items: center;
     border: 1px solid rgba(246, 239, 217, 0.15);
-    border-radius: 20px;
+    border-radius: 14px;
     background:
       linear-gradient(45deg, rgba(246, 239, 217, 0.06) 25%, transparent 25%),
       linear-gradient(-45deg, rgba(246, 239, 217, 0.06) 25%, transparent 25%),
@@ -260,7 +393,23 @@
     background-size: 16px 16px;
   }
 
-  .icon-stage img {
+  .image-preview-button {
+    display: grid;
+    width: 100%;
+    min-height: 132px;
+    place-items: center;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    cursor: zoom-in;
+  }
+
+  .image-preview-button:focus-visible {
+    outline: 2px solid rgba(198, 255, 72, 0.72);
+    outline-offset: -6px;
+  }
+
+  .image-preview-button img {
     max-width: 96px;
     max-height: 96px;
     object-fit: contain;
@@ -277,8 +426,8 @@
     margin: 0;
     overflow: hidden;
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: 24px;
-    letter-spacing: -0.04em;
+    font-size: 21px;
+    letter-spacing: 0;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -287,6 +436,103 @@
     overflow: hidden;
     color: rgba(246, 239, 217, 0.5);
     font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .image-preview-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.74);
+    backdrop-filter: blur(16px);
+  }
+
+  .image-preview {
+    display: grid;
+    gap: 14px;
+    width: min(860px, 100%);
+    max-height: calc(100vh - 40px);
+    padding: clamp(14px, 2.6vw, 22px);
+    border: 1px solid rgba(246, 239, 217, 0.2);
+    border-radius: 12px;
+    color: #f6efd9;
+    background:
+      linear-gradient(135deg, rgba(198, 255, 72, 0.08), transparent 34%),
+      rgba(16, 17, 14, 0.96);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.62);
+  }
+
+  .image-preview header,
+  .image-preview footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .image-preview h2 {
+    margin: 8px 0 0;
+    overflow: hidden;
+    font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+    font-size: 36px;
+    line-height: 1;
+    letter-spacing: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .preview-close {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid rgba(246, 239, 217, 0.2);
+    border-radius: 10px;
+    color: #f6efd9;
+    background: rgba(246, 239, 217, 0.06);
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .preview-close:hover,
+  .preview-close:focus-visible {
+    border-color: rgba(198, 255, 72, 0.5);
+    background: rgba(198, 255, 72, 0.12);
+    outline: none;
+  }
+
+  .preview-stage {
+    display: grid;
+    min-height: min(560px, 62vh);
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(246, 239, 217, 0.16);
+    border-radius: 10px;
+    background:
+      linear-gradient(45deg, rgba(246, 239, 217, 0.055) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(246, 239, 217, 0.055) 25%, transparent 25%),
+      rgba(246, 239, 217, 0.035);
+    background-position: 0 0, 0 10px;
+    background-size: 20px 20px;
+  }
+
+  .preview-stage img {
+    max-width: min(100%, 720px);
+    max-height: min(62vh, 620px);
+    object-fit: contain;
+    filter: drop-shadow(0 22px 42px rgba(0, 0, 0, 0.42));
+  }
+
+  .image-preview footer code {
+    min-width: 0;
+    overflow: hidden;
+    color: rgba(246, 239, 217, 0.58);
+    font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -307,11 +553,62 @@
     }
 
     .stat-stack {
-      min-height: 160px;
+      display: flex;
+      min-height: 58px;
+      align-items: baseline;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 14px;
     }
 
-    .result-count {
-      justify-items: start;
+    .stat-stack::after {
+      display: none;
+    }
+
+    .stat-stack strong {
+      font-size: 44px;
+      line-height: 0.86;
+    }
+
+    .stat-stack strong,
+    .stat-stack span {
+      justify-self: center;
+      align-self: baseline;
+      text-align: center;
+    }
+
+    .image-preview {
+      max-height: calc(100vh - 24px);
+    }
+
+    .image-preview header,
+    .image-preview footer {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .image-preview h2 {
+      font-size: 28px;
+    }
+
+    .preview-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+    }
+
+    .preview-stage {
+      min-height: min(420px, 58vh);
+    }
+  }
+
+  @media (max-width: 520px) {
+    h1 {
+      font-size: 42px;
+    }
+
+    .icon-grid {
+      grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
     }
   }
 </style>

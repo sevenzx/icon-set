@@ -2,6 +2,8 @@
 
 一个使用 `SvelteKit + Axum` 构建的图标集合管理应用。公开页面读取图标集合，管理员后台通过 Rust 后端安全写入 GitHub 公开仓库。
 
+源码仓库：[sevenzx/icon-set](https://github.com/sevenzx/icon-set)
+
 ## 功能
 
 - 按 set 管理不同图标库，例如 `emby`、`sub`
@@ -90,10 +92,10 @@ npm run dev:web
 
 默认前端地址是 `http://localhost:5173`，后端地址是 `http://127.0.0.1:3000`。开发时前端通过 Vite proxy 转发 `/api` 请求。
 
-前端复制集合地址时会生成 `sets/{id}/manifest.json` 的 raw GitHub URL。默认资源根地址是：
+前端复制集合地址时会生成 `sets/{id}/manifest.json` 的 raw GitHub URL。资源根地址示例：
 
 ```env
-VITE_RAW_ASSET_BASE_URL=https://raw.githubusercontent.com/sevenzx/icon-set-assets/refs/heads/main
+VITE_RAW_ASSET_BASE_URL=https://raw.githubusercontent.com/<owner>/<assets-repo>/refs/heads/main
 ```
 
 如果部署到其他公开资源仓库，在 `apps/web/.env` 中覆盖这个值。
@@ -152,7 +154,7 @@ docker network connect icon-set your-caddy-container
 外层 Caddyfile 示例：
 
 ```caddyfile
-icon-set.19970925.xyz {
+icon-set.example.com {
   encode zstd gzip
   reverse_proxy icon-set-web:80
 }
@@ -161,7 +163,7 @@ icon-set.19970925.xyz {
 同域部署时，`deploy/api.env` 建议设置：
 
 ```env
-CORS_ORIGIN=https://icon-set.19970925.xyz
+CORS_ORIGIN=https://icon-set.example.com
 COOKIE_SECURE=true
 ```
 

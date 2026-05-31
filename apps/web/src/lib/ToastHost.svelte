@@ -87,7 +87,7 @@
     height: 28px;
     place-items: center;
     border: 1px solid rgba(246, 239, 217, 0.2);
-    border-radius: 999px;
+    border-radius: 8px;
     color: rgba(246, 239, 217, 0.82);
     background: rgba(246, 239, 217, 0.08);
     line-height: 1;

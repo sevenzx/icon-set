@@ -1,5 +1,7 @@
 <script lang="ts">
   import ToastHost from '$lib/ToastHost.svelte';
+
+  const repositoryUrl = 'https://github.com/sevenzx/icon-set';
 </script>
 
 <svelte:head>
@@ -11,6 +13,28 @@
 </svelte:head>
 
 <div class="site-shell">
+  <header class="shell-topbar">
+    <a class="brand-lockup" href="/" aria-label="返回图标集合首页">
+      <span>IS</span>
+      <strong>Icon Set</strong>
+    </a>
+    <a
+      class="repo-link"
+      href={repositoryUrl}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="打开 GitHub 仓库 sevenzx/icon-set"
+      title="sevenzx/icon-set"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.23c-3.34.73-4.04-1.42-4.04-1.42-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.23 1.91 1.23 3.22 0 4.61-2.81 5.62-5.49 5.92.43.37.82 1.1.82 2.22v3.3c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"
+          fill="currentColor"
+        />
+      </svg>
+    </a>
+  </header>
+
   <main>
     <slot />
   </main>
@@ -37,10 +61,10 @@
     color: #f6efd9;
     font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     background:
-      radial-gradient(circle at 16% 12%, rgba(255, 85, 36, 0.22), transparent 28rem),
-      radial-gradient(circle at 88% 0%, rgba(198, 255, 72, 0.16), transparent 24rem),
-      repeating-linear-gradient(90deg, rgba(246, 239, 217, 0.04) 0 1px, transparent 1px 72px),
-      repeating-linear-gradient(0deg, rgba(246, 239, 217, 0.035) 0 1px, transparent 1px 72px),
+      radial-gradient(circle at 16% 8%, rgba(255, 85, 36, 0.12), transparent 25rem),
+      radial-gradient(circle at 86% 0%, rgba(198, 255, 72, 0.1), transparent 22rem),
+      repeating-linear-gradient(90deg, rgba(246, 239, 217, 0.035) 0 1px, transparent 1px 72px),
+      repeating-linear-gradient(0deg, rgba(246, 239, 217, 0.028) 0 1px, transparent 1px 72px),
       #0c0d0b;
   }
 
@@ -74,7 +98,7 @@
 
   :global(.page-stack) {
     display: grid;
-    gap: 28px;
+    gap: 20px;
   }
 
   :global(.eyebrow) {
@@ -84,13 +108,13 @@
     width: fit-content;
     padding: 8px 12px;
     border: 1px solid rgba(246, 239, 217, 0.24);
-    border-radius: 999px;
+    border-radius: 10px;
     color: #c6ff48;
     background: rgba(12, 13, 11, 0.58);
     box-shadow: 0 0 0 1px rgba(198, 255, 72, 0.06) inset;
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.12em;
+    letter-spacing: 0;
     text-transform: uppercase;
   }
 
@@ -101,7 +125,7 @@
     width: fit-content;
     padding: 10px 12px;
     border: 1px solid rgba(246, 239, 217, 0.16);
-    border-radius: 999px;
+    border-radius: 10px;
     color: rgba(246, 239, 217, 0.62);
     background: rgba(12, 13, 11, 0.58);
     font-size: 12px;
@@ -123,27 +147,27 @@
   :global(.hero) {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.7fr);
-    gap: 28px;
-    min-height: 420px;
-    padding: clamp(24px, 5vw, 60px);
+    grid-template-columns: minmax(0, 1.25fr) minmax(240px, 0.75fr);
+    gap: clamp(18px, 4vw, 36px);
+    min-height: 300px;
+    padding: clamp(22px, 4vw, 42px);
     overflow: hidden;
     border: 1px solid rgba(246, 239, 217, 0.22);
-    border-radius: 32px;
+    border-radius: 12px;
     background:
-      linear-gradient(135deg, rgba(246, 239, 217, 0.08), transparent 48%),
-      linear-gradient(162deg, rgba(255, 85, 36, 0.14), rgba(12, 13, 11, 0.72) 42%),
+      linear-gradient(135deg, rgba(246, 239, 217, 0.06), transparent 48%),
+      linear-gradient(162deg, rgba(255, 85, 36, 0.08), rgba(12, 13, 11, 0.78) 42%),
       #10110e;
-    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.38);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
   }
 
   :global(.hero::after) {
     position: absolute;
-    right: -80px;
-    bottom: -110px;
-    width: 360px;
-    height: 360px;
-    border: 1px solid rgba(198, 255, 72, 0.4);
+    right: -70px;
+    bottom: -100px;
+    width: 270px;
+    height: 270px;
+    border: 1px solid rgba(198, 255, 72, 0.26);
     border-radius: 44% 56% 55% 45%;
     content: '';
     transform: rotate(-18deg);
@@ -153,10 +177,10 @@
     max-width: 920px;
     margin: 0;
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: clamp(54px, 11vw, 136px);
+    font-size: 104px;
     font-weight: 800;
     line-height: 0.86;
-    letter-spacing: -0.08em;
+    letter-spacing: 0;
     text-transform: uppercase;
   }
 
@@ -166,28 +190,28 @@
 
   :global(.lead) {
     max-width: 760px;
-    margin: 20px 0 0;
-    color: rgba(246, 239, 217, 0.76);
-    font-size: clamp(15px, 1.8vw, 18px);
-    line-height: 1.85;
+    margin: 18px 0 0;
+    color: rgba(246, 239, 217, 0.72);
+    font-size: 15px;
+    line-height: 1.75;
   }
 
   :global(.panel) {
     border: 1px solid rgba(246, 239, 217, 0.2);
-    border-radius: 26px;
-    background: rgba(16, 17, 14, 0.78);
-    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+    border-radius: 8px;
+    background: rgba(16, 17, 14, 0.76);
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.22);
     backdrop-filter: blur(18px);
   }
 
   :global(.panel-pad) {
-    padding: clamp(18px, 3vw, 30px);
+    padding: clamp(16px, 2.4vw, 26px);
   }
 
   :global(.grid) {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 18px;
+    gap: 14px;
   }
 
   :global(.action) {
@@ -195,15 +219,15 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    min-height: 44px;
-    padding: 11px 16px;
+    min-height: 40px;
+    padding: 9px 14px;
     border: 1px solid rgba(246, 239, 217, 0.28);
-    border-radius: 999px;
+    border-radius: 10px;
     color: #0c0d0b;
     background: #c6ff48;
-    box-shadow: 5px 5px 0 #ff5524;
+    box-shadow: 3px 3px 0 rgba(255, 85, 36, 0.86);
     font-weight: 800;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
     transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
   }
 
@@ -234,7 +258,7 @@
     color: rgba(246, 239, 217, 0.7);
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0;
     text-transform: uppercase;
   }
 
@@ -242,19 +266,19 @@
   :global(.textarea) {
     width: 100%;
     border: 1px solid rgba(246, 239, 217, 0.22);
-    border-radius: 18px;
+    border-radius: 8px;
     color: #f6efd9;
     background: rgba(12, 13, 11, 0.72);
     outline: none;
   }
 
   :global(.input) {
-    min-height: 48px;
+    min-height: 44px;
     padding: 0 16px;
   }
 
   :global(.textarea) {
-    min-height: 116px;
+    min-height: 106px;
     padding: 14px 16px;
     resize: vertical;
   }
@@ -268,7 +292,7 @@
   :global(.notice) {
     padding: 14px 16px;
     border: 1px solid rgba(198, 255, 72, 0.22);
-    border-radius: 18px;
+    border-radius: 8px;
     color: rgba(246, 239, 217, 0.82);
     background: rgba(198, 255, 72, 0.08);
     line-height: 1.6;
@@ -281,20 +305,93 @@
   }
 
   .site-shell {
-    width: min(1440px, 100%);
+    width: min(1180px, 100%);
     margin: 0 auto;
-    padding: 18px clamp(16px, 3vw, 36px) 60px;
+    padding: 16px clamp(14px, 3vw, 30px) 56px;
+  }
+
+  .shell-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .brand-lockup,
+  .repo-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    border: 1px solid rgba(246, 239, 217, 0.16);
+    border-radius: 10px;
+    background: rgba(12, 13, 11, 0.58);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .brand-lockup {
+    gap: 10px;
+    padding: 4px 12px 4px 4px;
+  }
+
+  .brand-lockup span {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border-radius: 10px;
+    color: #0c0d0b;
+    background: #f6efd9;
+    box-shadow: 3px 3px 0 rgba(255, 85, 36, 0.9);
+  }
+
+  .brand-lockup strong {
+    letter-spacing: 0;
+  }
+
+  .repo-link {
+    justify-content: center;
+    width: 40px;
+    padding: 0;
+    color: #c6ff48;
+  }
+
+  .repo-link svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .repo-link:hover,
+  .brand-lockup:hover {
+    border-color: rgba(198, 255, 72, 0.42);
+    background: rgba(24, 26, 20, 0.78);
   }
 
   main {
     display: grid;
-    gap: 24px;
+    gap: 18px;
   }
 
   @media (max-width: 760px) {
     :global(.hero) {
       grid-template-columns: 1fr;
       min-height: auto;
+    }
+
+    :global(.hero-title) {
+      font-size: 68px;
+    }
+  }
+
+  @media (max-width: 460px) {
+    .repo-link {
+      width: 40px;
+      flex: 0 0 40px;
+    }
+
+    :global(.hero-title) {
+      font-size: 54px;
     }
   }
 </style>

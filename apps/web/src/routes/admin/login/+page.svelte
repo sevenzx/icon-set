@@ -66,9 +66,14 @@
   h1 {
     margin: 0;
     font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: clamp(48px, 9vw, 88px);
-    line-height: 0.9;
-    letter-spacing: -0.07em;
+    font-size: 68px;
+    line-height: 0.94;
+    letter-spacing: 0;
   }
 
+  @media (max-width: 620px) {
+    h1 {
+      font-size: 48px;
+    }
+  }
 </style>
