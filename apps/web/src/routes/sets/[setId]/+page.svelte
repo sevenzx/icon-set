@@ -14,9 +14,28 @@
   let copiedUrl = '';
   let failedUrl = '';
   let previewIcon: IconEntry | null = null;
+  let pageSize = 24;
+  let currentPage = 1;
+  let previousQuery = '';
+  let previousPageSize = pageSize;
+
+  const pageSizeOptions = [24, 48, 96];
 
   $: filteredIcons = filterIcons(manifest?.icons ?? [], query);
   $: manifestUrl = manifest ? manifestRawUrl(manifest.id) : '';
+  $: showPaginationControls = (manifest?.icons.length ?? 0) > pageSizeOptions[0];
+  $: totalPages = Math.max(1, Math.ceil(filteredIcons.length / pageSize));
+  $: if (query !== previousQuery || pageSize !== previousPageSize) {
+    currentPage = 1;
+    previousQuery = query;
+    previousPageSize = pageSize;
+  }
+  $: if (currentPage > totalPages) {
+    currentPage = totalPages;
+  }
+  $: pageStart = (currentPage - 1) * pageSize;
+  $: pageEnd = Math.min(pageStart + pageSize, filteredIcons.length);
+  $: pagedIcons = filteredIcons.slice(pageStart, pageEnd);
 
   /// 读取当前路由对应的图标集合。
   async function refreshManifest() {
@@ -78,6 +97,10 @@
   function copyPreviewUrl() {
     if (!previewIcon) return;
     void copyUrl(previewIcon.url);
+  }
+
+  function goToPage(page: number) {
+    currentPage = Math.min(Math.max(page, 1), totalPages);
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -144,7 +167,7 @@
     <div class="notice">没有匹配的图标。</div>
   {:else}
     <section class="icon-grid">
-      {#each filteredIcons as icon}
+      {#each pagedIcons as icon}
         <article class="icon-card panel">
           <button
             class:copied={copiedUrl === icon.url}
@@ -189,6 +212,50 @@
         </article>
       {/each}
     </section>
+
+    {#if showPaginationControls}
+      <nav class="pagination" aria-label="图标分页">
+        <span class="pagination-summary">
+          <strong>{pageStart + 1}-{pageEnd}</strong>
+          / {filteredIcons.length} icons
+        </span>
+        <label class="page-size-control">
+          <span>每页</span>
+          <select class="input page-size-select" bind:value={pageSize}>
+            {#each pageSizeOptions as option}
+              <option value={option}>{option} 个</option>
+            {/each}
+          </select>
+        </label>
+        {#if totalPages > 1}
+          <div class="pagination-actions">
+            <button
+              class="page-button"
+              type="button"
+              aria-label="上一页"
+              disabled={currentPage === 1}
+              on:click={() => goToPage(currentPage - 1)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <strong class="page-indicator">{currentPage} / {totalPages}</strong>
+            <button
+              class="page-button"
+              type="button"
+              aria-label="下一页"
+              disabled={currentPage === totalPages}
+              on:click={() => goToPage(currentPage + 1)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+          </div>
+        {/if}
+      </nav>
+    {/if}
   {/if}
 {/if}
 
@@ -537,6 +604,91 @@
     white-space: nowrap;
   }
 
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    border: 1px solid rgba(246, 239, 217, 0.16);
+    border-radius: 8px;
+    background: rgba(16, 17, 14, 0.64);
+  }
+
+  .pagination-summary {
+    color: rgba(246, 239, 217, 0.58);
+    font-size: 12px;
+  }
+
+  .pagination-summary strong {
+    color: #c6ff48;
+  }
+
+  .page-size-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    color: rgba(246, 239, 217, 0.58);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .page-size-select {
+    width: 108px;
+    min-height: 38px;
+    color: #f6efd9;
+  }
+
+  .pagination-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .page-button {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border: 1px solid rgba(246, 239, 217, 0.2);
+    border-radius: 10px;
+    color: rgba(246, 239, 217, 0.76);
+    background: rgba(246, 239, 217, 0.06);
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+  }
+
+  .page-button:hover:not(:disabled),
+  .page-button:focus-visible {
+    border-color: rgba(198, 255, 72, 0.55);
+    color: #c6ff48;
+    background: rgba(198, 255, 72, 0.1);
+    outline: none;
+  }
+
+  .page-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.38;
+  }
+
+  .page-button svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  .page-indicator {
+    min-width: 74px;
+    color: rgba(246, 239, 217, 0.72);
+    font-size: 12px;
+    text-align: center;
+  }
+
   @media (max-width: 720px) {
     .set-hero,
     .toolbar {
@@ -546,6 +698,24 @@
     .toolbar {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    .pagination {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .page-size-control {
+      justify-content: space-between;
+      margin-left: 0;
+    }
+
+    .page-size-select {
+      width: 130px;
+    }
+
+    .pagination-actions {
+      justify-content: space-between;
     }
 
     .hero-side {
