@@ -53,7 +53,7 @@ impl GithubOAuthClient {
 
     pub fn authorize_url(&self, state: &str) -> String {
         format!(
-            "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}&scope={}&state={}",
+            "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}&scope={}&state={}&prompt=select_account",
             encode(&self.config.github_oauth_client_id),
             encode(&self.redirect_uri()),
             encode("read:user user:email"),

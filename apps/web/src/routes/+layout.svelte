@@ -47,10 +47,7 @@
     closeAccountMenu();
     await logout();
     sessionUser = null;
-
-    if ($page.url.pathname.startsWith('/console')) {
-      await goto('/console/login');
-    }
+    await goto('/');
   }
 </script>
 
