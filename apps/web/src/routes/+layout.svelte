@@ -1,19 +1,60 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { onMount } from 'svelte';
-  import { getSession } from '$lib/api';
+  import { getSession, logout } from '$lib/api';
   import { authenticated } from '$lib/auth-state';
   import ToastHost from '$lib/ToastHost.svelte';
+  import type { UserProfile } from '$lib/types';
 
   const repositoryUrl = 'https://github.com/sevenzx/icon-set';
 
+  let sessionUser: UserProfile | null = null;
+  let accountMenuOpen = false;
+
+  $: accountName = sessionUser?.name || sessionUser?.login || '已登录用户';
+  $: accountLogin = sessionUser?.login ? `@${sessionUser.login}` : 'GitHub 账号';
+  $: avatarFallback = (sessionUser?.login || sessionUser?.name || 'U')
+    .trim()
+    .slice(0, 2)
+    .toUpperCase();
+
   onMount(async () => {
     try {
-      await getSession();
+      const session = await getSession();
+      sessionUser = session.authenticated ? (session.user ?? null) : null;
     } catch {
+      sessionUser = null;
       authenticated.set(false);
     }
   });
+
+  function toggleAccountMenu() {
+    accountMenuOpen = !accountMenuOpen;
+  }
+
+  function closeAccountMenu() {
+    accountMenuOpen = false;
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      closeAccountMenu();
+    }
+  }
+
+  async function submitLogout() {
+    closeAccountMenu();
+    await logout();
+    sessionUser = null;
+
+    if ($page.url.pathname.startsWith('/console')) {
+      await goto('/console/login');
+    }
+  }
 </script>
+
+<svelte:window on:click={closeAccountMenu} on:keydown={handleWindowKeydown} />
 
 <svelte:head>
   <title>Icon Set Vault</title>
@@ -23,16 +64,44 @@
   />
 </svelte:head>
 
-<div class="site-shell">
+<div class="site-shell" class:has-account={$authenticated}>
   <header class="shell-topbar">
     <a class="brand-lockup" href="/" aria-label="返回图标集合首页">
       <span>IS</span>
     </a>
     <nav class="top-actions" aria-label="站点操作">
-      <a class="login-link" href={$authenticated ? '/console' : '/console/login'}>
-        <span class="login-label-full">{$authenticated ? '控制台' : '登录'}</span>
-        <span class="login-label-short">{$authenticated ? '控制' : '登录'}</span>
-      </a>
+      {#if $authenticated}
+        <div class="account-menu">
+          <button
+            class="account-button"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={accountMenuOpen}
+            aria-label="打开账户菜单"
+            title={accountName}
+            on:click|stopPropagation={toggleAccountMenu}
+          >
+            {#if sessionUser?.avatar_url}
+              <img src={sessionUser.avatar_url} alt="" referrerpolicy="no-referrer" />
+            {:else}
+              <span>{avatarFallback}</span>
+            {/if}
+          </button>
+
+          {#if accountMenuOpen}
+            <div class="account-popover" role="menu">
+              <div class="account-meta">
+                <strong>{accountName}</strong>
+                <span>{accountLogin}</span>
+              </div>
+              <a href="/console" role="menuitem" on:click={closeAccountMenu}>进入控制台</a>
+              <button type="button" role="menuitem" on:click={submitLogout}>登出</button>
+            </div>
+          {/if}
+        </div>
+      {:else}
+        <a class="login-link" href="/console/login">登录</a>
+      {/if}
       <a
         class="repo-link"
         href={repositoryUrl}
@@ -354,6 +423,10 @@
     padding: calc(var(--topbar-top) + var(--topbar-height) + 28px) var(--shell-pad) 56px;
   }
 
+  .site-shell.has-account {
+    --topbar-actions-space: 104px;
+  }
+
   .shell-topbar {
     position: fixed;
     top: var(--topbar-top);
@@ -385,6 +458,7 @@
 
   .brand-lockup,
   .login-link,
+  .account-button,
   .repo-link {
     display: inline-flex;
     align-items: center;
@@ -428,8 +502,114 @@
     color: #f6efd9;
   }
 
-  .login-label-short {
-    display: none;
+  .account-menu {
+    position: relative;
+    pointer-events: auto;
+  }
+
+  .account-button {
+    justify-content: center;
+    width: var(--topbar-height);
+    padding: 4px;
+    color: #0c0d0b;
+  }
+
+  .account-button img,
+  .account-button span {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border-radius: 10px;
+  }
+
+  .account-button img {
+    object-fit: cover;
+  }
+
+  .account-button span {
+    background: #f6efd9;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .account-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 130;
+    display: grid;
+    gap: 6px;
+    width: 196px;
+    padding: 8px;
+    border: 1px solid rgba(246, 239, 217, 0.18);
+    border-radius: 12px;
+    color: #f6efd9;
+    background:
+      linear-gradient(135deg, rgba(198, 255, 72, 0.08), transparent 58%),
+      rgba(12, 13, 11, 0.92);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+    backdrop-filter: blur(18px);
+  }
+
+  .account-popover::before {
+    position: absolute;
+    top: -5px;
+    right: 17px;
+    width: 9px;
+    height: 9px;
+    border-top: 1px solid rgba(246, 239, 217, 0.18);
+    border-left: 1px solid rgba(246, 239, 217, 0.18);
+    content: '';
+    background: rgba(12, 13, 11, 0.92);
+    transform: rotate(45deg);
+  }
+
+  .account-meta {
+    display: grid;
+    gap: 2px;
+    padding: 8px 9px 10px;
+    border-bottom: 1px solid rgba(246, 239, 217, 0.12);
+  }
+
+  .account-meta strong,
+  .account-meta span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-meta strong {
+    color: #f6efd9;
+    font-size: 13px;
+  }
+
+  .account-meta span {
+    color: rgba(246, 239, 217, 0.55);
+    font-size: 11px;
+  }
+
+  .account-popover a,
+  .account-popover button {
+    display: flex;
+    align-items: center;
+    min-height: 36px;
+    width: 100%;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    color: rgba(246, 239, 217, 0.88);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: left;
+  }
+
+  .account-popover a:hover,
+  .account-popover button:hover {
+    color: #0c0d0b;
+    background: #c6ff48;
   }
 
   .repo-link {
@@ -446,6 +626,8 @@
 
   .repo-link:hover,
   .login-link:hover,
+  .account-button:hover,
+  .account-button[aria-expanded='true'],
   .brand-lockup:hover {
     border-color: rgba(198, 255, 72, 0.42);
     background: rgba(24, 26, 20, 0.78);
@@ -459,6 +641,10 @@
   @media (max-width: 760px) {
     :global(html) {
       --topbar-actions-space: 116px;
+    }
+
+    .site-shell.has-account {
+      --topbar-actions-space: 96px;
     }
 
     :global(.breadcrumb) {
@@ -485,13 +671,6 @@
       padding: 0 10px;
     }
 
-    .login-label-full {
-      display: none;
-    }
-
-    .login-label-short {
-      display: inline;
-    }
   }
 
   @media (max-width: 460px) {
@@ -500,6 +679,10 @@
       --shell-pad: 12px;
       --topbar-gap: 8px;
       --topbar-actions-space: 104px;
+    }
+
+    .site-shell.has-account {
+      --topbar-actions-space: 96px;
     }
 
     :global(.breadcrumb) {
