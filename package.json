@@ -5,6 +5,7 @@
     "apps/web"
   ],
   "scripts": {
+    "sync:docs": "node scripts/sync-docs.mjs",
     "dev:web": "npm --workspace apps/web run dev",
     "build:web": "npm --workspace apps/web run build",
     "check:web": "npm --workspace apps/web run check",

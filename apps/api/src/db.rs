@@ -384,7 +384,11 @@ impl Database {
         .transpose()
     }
 
-    pub async fn repo_config(&self, user_id: i64, secrets: &SecretBox) -> AppResult<RepoConfig> {
+    pub async fn repo_config_optional(
+        &self,
+        user_id: i64,
+        secrets: &SecretBox,
+    ) -> AppResult<Option<RepoConfig>> {
         let row = sqlx::query(
             r#"
             select github_owner, github_repo, github_branch, github_token_ciphertext
@@ -395,27 +399,36 @@ impl Database {
         .bind(user_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|err| AppError::Internal(format!("仓库配置查询失败：{err}")))?
-        .ok_or_else(|| AppError::BadRequest("请先配置 GitHub 仓库".to_string()))?;
+        .map_err(|err| AppError::Internal(format!("仓库配置查询失败：{err}")))?;
 
-        let encrypted_token: String = row
-            .try_get("github_token_ciphertext")
-            .map_err(|err| AppError::Internal(format!("仓库 token 读取失败：{err}")))?;
-        let owner: String = row
-            .try_get("github_owner")
-            .map_err(|err| AppError::Internal(format!("仓库 owner 读取失败：{err}")))?;
-        let repo: String = row
-            .try_get("github_repo")
-            .map_err(|err| AppError::Internal(format!("仓库 repo 读取失败：{err}")))?;
-        let branch: String = row
-            .try_get("github_branch")
-            .map_err(|err| AppError::Internal(format!("仓库 branch 读取失败：{err}")))?;
-        Ok(RepoConfig {
-            owner: secrets.decrypt(&owner)?,
-            repo: secrets.decrypt(&repo)?,
-            branch: secrets.decrypt(&branch)?,
-            token: secrets.decrypt(&encrypted_token)?,
+        row.map(|row| {
+            let encrypted_token: String = row
+                .try_get("github_token_ciphertext")
+                .map_err(|err| AppError::Internal(format!("仓库 token 读取失败：{err}")))?;
+            let owner: String = row
+                .try_get("github_owner")
+                .map_err(|err| AppError::Internal(format!("仓库 owner 读取失败：{err}")))?;
+            let repo: String = row
+                .try_get("github_repo")
+                .map_err(|err| AppError::Internal(format!("仓库 repo 读取失败：{err}")))?;
+            let branch: String = row
+                .try_get("github_branch")
+                .map_err(|err| AppError::Internal(format!("仓库 branch 读取失败：{err}")))?;
+
+            Ok(RepoConfig {
+                owner: secrets.decrypt(&owner)?,
+                repo: secrets.decrypt(&repo)?,
+                branch: secrets.decrypt(&branch)?,
+                token: secrets.decrypt(&encrypted_token)?,
+            })
         })
+        .transpose()
+    }
+
+    pub async fn repo_config(&self, user_id: i64, secrets: &SecretBox) -> AppResult<RepoConfig> {
+        self.repo_config_optional(user_id, secrets)
+            .await?
+            .ok_or_else(|| AppError::BadRequest("请先配置 GitHub 仓库".to_string()))
     }
 
     pub async fn upsert_repo_config(

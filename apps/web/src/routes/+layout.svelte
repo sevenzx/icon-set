@@ -27,11 +27,11 @@
   <header class="shell-topbar">
     <a class="brand-lockup" href="/" aria-label="返回图标集合首页">
       <span>IS</span>
-      <strong>Icon Set</strong>
     </a>
     <nav class="top-actions" aria-label="站点操作">
-      <a class="login-link" href={$authenticated ? '/admin' : '/admin/login'}>
-        {$authenticated ? '控制台' : '登录'}
+      <a class="login-link" href={$authenticated ? '/console' : '/console/login'}>
+        <span class="login-label-full">{$authenticated ? '控制台' : '登录'}</span>
+        <span class="login-label-short">{$authenticated ? '控制' : '登录'}</span>
       </a>
       <a
         class="repo-link"
@@ -66,6 +66,17 @@
   }
 
   :global(html) {
+    --shell-max: 1180px;
+    --shell-pad: clamp(14px, 3vw, 30px);
+    --topbar-top: 14px;
+    --topbar-height: 44px;
+    --topbar-gap: 10px;
+    --topbar-edge: max(
+      var(--shell-pad),
+      calc((100vw - var(--shell-max)) / 2 + var(--shell-pad))
+    );
+    --topbar-logo-space: calc(var(--topbar-height) + var(--topbar-gap));
+    --topbar-actions-space: 144px;
     color-scheme: dark;
     background: #0c0d0b;
   }
@@ -135,24 +146,41 @@
   }
 
   :global(.breadcrumb) {
+    position: fixed;
+    top: var(--topbar-top);
+    right: calc(var(--topbar-edge) + var(--topbar-actions-space));
+    left: calc(var(--topbar-edge) + var(--topbar-logo-space));
+    z-index: 110;
     display: flex;
     align-items: center;
     gap: 10px;
-    width: fit-content;
-    padding: 10px 12px;
+    height: var(--topbar-height);
+    min-width: 0;
+    padding: 0 14px;
+    overflow: hidden;
     border: 1px solid rgba(246, 239, 217, 0.16);
     border-radius: 10px;
     color: rgba(246, 239, 217, 0.62);
-    background: rgba(12, 13, 11, 0.58);
+    background:
+      linear-gradient(90deg, rgba(198, 255, 72, 0.07), transparent 44%),
+      rgba(12, 13, 11, 0.7);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(18px);
     font-size: 12px;
     font-weight: 800;
   }
 
   :global(.breadcrumb a) {
+    flex: 0 0 auto;
     color: #c6ff48;
   }
 
+  :global(.breadcrumb span) {
+    flex: 0 0 auto;
+  }
+
   :global(.breadcrumb strong) {
+    min-width: 0;
     max-width: min(52vw, 520px);
     overflow: hidden;
     color: #f6efd9;
@@ -321,17 +349,38 @@
   }
 
   .site-shell {
-    width: min(1180px, 100%);
+    width: min(var(--shell-max), 100%);
     margin: 0 auto;
-    padding: 16px clamp(14px, 3vw, 30px) 56px;
+    padding: calc(var(--topbar-top) + var(--topbar-height) + 28px) var(--shell-pad) 56px;
   }
 
   .shell-topbar {
+    position: fixed;
+    top: var(--topbar-top);
+    right: var(--topbar-edge);
+    left: var(--topbar-edge);
+    z-index: 100;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 18px;
+    gap: var(--topbar-gap);
+    height: var(--topbar-height);
+    pointer-events: none;
+  }
+
+  .shell-topbar::before {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border: 1px solid rgba(246, 239, 217, 0.08);
+    border-radius: 14px;
+    content: '';
+    background:
+      linear-gradient(90deg, rgba(255, 85, 36, 0.09), transparent 32%),
+      linear-gradient(90deg, transparent 56%, rgba(198, 255, 72, 0.08)),
+      rgba(12, 13, 11, 0.58);
+    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.24);
+    backdrop-filter: blur(20px);
   }
 
   .brand-lockup,
@@ -339,17 +388,19 @@
   .repo-link {
     display: inline-flex;
     align-items: center;
-    min-height: 40px;
+    min-height: var(--topbar-height);
     border: 1px solid rgba(246, 239, 217, 0.16);
     border-radius: 10px;
     background: rgba(12, 13, 11, 0.58);
     font-size: 12px;
     font-weight: 800;
+    pointer-events: auto;
   }
 
   .brand-lockup {
-    gap: 10px;
-    padding: 4px 12px 4px 4px;
+    justify-content: center;
+    width: var(--topbar-height);
+    padding: 4px;
   }
 
   .brand-lockup span {
@@ -363,20 +414,22 @@
     box-shadow: 3px 3px 0 rgba(255, 85, 36, 0.9);
   }
 
-  .brand-lockup strong {
-    letter-spacing: 0;
-  }
-
   .top-actions {
     display: flex;
     align-items: center;
     gap: 8px;
+    pointer-events: auto;
   }
 
   .login-link {
     justify-content: center;
+    min-width: 82px;
     padding: 0 14px;
     color: #f6efd9;
+  }
+
+  .login-label-short {
+    display: none;
   }
 
   .repo-link {
@@ -404,6 +457,20 @@
   }
 
   @media (max-width: 760px) {
+    :global(html) {
+      --topbar-actions-space: 116px;
+    }
+
+    :global(.breadcrumb) {
+      gap: 8px;
+      padding: 0 12px;
+    }
+
+    :global(.breadcrumb a:first-of-type),
+    :global(.breadcrumb a:first-of-type + span) {
+      display: none;
+    }
+
     :global(.hero) {
       grid-template-columns: 1fr;
       min-height: auto;
@@ -412,9 +479,38 @@
     :global(.hero-title) {
       font-size: 68px;
     }
+
+    .login-link {
+      min-width: 54px;
+      padding: 0 10px;
+    }
+
+    .login-label-full {
+      display: none;
+    }
+
+    .login-label-short {
+      display: inline;
+    }
   }
 
   @media (max-width: 460px) {
+    :global(html) {
+      --topbar-top: 10px;
+      --shell-pad: 12px;
+      --topbar-gap: 8px;
+      --topbar-actions-space: 104px;
+    }
+
+    :global(.breadcrumb) {
+      padding: 0 10px;
+      font-size: 11px;
+    }
+
+    :global(.breadcrumb strong) {
+      max-width: none;
+    }
+
     .shell-topbar {
       gap: 10px;
     }
@@ -424,7 +520,8 @@
     }
 
     .login-link {
-      padding: 0 10px;
+      min-width: 44px;
+      padding: 0 9px;
     }
 
     .repo-link {

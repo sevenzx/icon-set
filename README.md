@@ -1,30 +1,30 @@
 # Icon Set
 
-一个使用 `SvelteKit + Axum + Postgres` 构建的图标集合管理应用。公开页面展示示例图标集合；登录后的用户可以配置自己的 GitHub 图标仓库，后台数据按用户隔离。
+一个使用 `SvelteKit + Axum + Postgres` 构建的图标集合管理应用。公开页面展示示例图标集合；登录后的用户可以在控制台配置自己的 GitHub 图标仓库，数据按用户隔离。
 
 源码仓库：[sevenzx/icon-set](https://github.com/sevenzx/icon-set)
 
 ## 功能
 
 - 按 set 管理不同图标库，例如 `emby`、`sub`
-- 未登录用户只看到内置演示集合，不展示后台入口
-- GitHub OAuth 登录，后台入口按登录用户隔离
+- 未登录用户只看到内置演示集合，不展示控制台入口
+- GitHub OAuth 登录，控制台入口按登录用户隔离
 - 每个登录用户独立配置 GitHub owner、repo、branch 和 token
 - 用户 GitHub Token 使用服务端 `ENCRYPTION_KEY` 加密后存入 Postgres
 - 前台支持搜索图标、复制图标 Raw URL、复制集合 Manifest URL、查看大图和分页
-- 后台支持创建 set、编辑集合信息、上传图片、批量上传图片或 zip 压缩包
+- 控制台支持创建 set、编辑集合信息、上传图片、批量上传图片或 zip 压缩包
 - 批量上传总体积限制为 10MB，图片命名冲突会自动追加 `_01`、`_02`
 - 上传图片时会在当前 set 内校验 MD5，避免同一集合重复收录相同图片
-- 后台写接口同时校验 session cookie 和登录后签发的 `X-Admin-Token`
-- 后台操作带同源 CSRF 校验、短时防重复提交和审计日志
+- 受保护写接口同时校验 session cookie 和登录后签发的 `X-Admin-Token`
+- 控制台操作带同源 CSRF 校验、短时防重复提交和审计日志
 - 删除集合和删除图标使用二段式确认弹窗
 
 ## 数据流
 
 - 公开 API：返回内置演示数据，用于首页和未登录浏览，不读取真实 GitHub 仓库。
 - 登录 API：通过 GitHub OAuth 建立 session，session 存在 Postgres。
-- 后台 API：根据当前登录用户读取 `repo_config`，解密该用户的 GitHub Token 后写入对应仓库。
-- 前端不会接触 GitHub 写权限 token，后台接口只识别当前登录 session。
+- 受保护 API：根据当前登录用户读取 `repo_config`，解密该用户的 GitHub Token 后写入对应仓库。
+- 前端不会接触 GitHub 写权限 token，写接口只识别当前登录 session。
 
 ## GitHub 仓库结构
 
@@ -164,7 +164,7 @@ npm run dev:web
 
 ## 用户仓库配置
 
-用户登录 `/admin` 后，在后台填写自己的 GitHub 仓库配置：
+用户登录 `/console` 后，在控制台填写自己的 GitHub 仓库配置：
 
 - Owner：GitHub 用户名或组织名
 - Repo：用于存放图标资产的仓库名
@@ -177,13 +177,18 @@ Token 权限建议：
 - Contents：Read and write
 - Metadata：Read
 
+详细步骤见 [GitHub 仓库配置指引](docs/github-repo-config.md)。
+
 ## 常用命令
 
 ```bash
+npm run sync:docs
 npm run check:web
 npm run build:web
 npm run check:api
 ```
+
+`docs/github-repo-config.md` 会同步到 `apps/web/static/docs/github-repo-config.md` 供前端文档页读取。`npm run sync:docs` 可以手动同步；前端 dev/build 时也会自动同步。
 
 ## Docker 部署
 

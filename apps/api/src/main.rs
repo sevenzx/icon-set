@@ -84,7 +84,7 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         ])
         .allow_credentials(true);
 
-    let admin_router = Router::new()
+    let console_router = Router::new()
         .route(
             "/config",
             get(handlers::get_repo_config).put(handlers::save_repo_config),
@@ -136,7 +136,7 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         )
         .route("/api/auth/logout", post(handlers::logout))
         .route("/api/auth/session", get(handlers::session))
-        .nest("/api/admin", admin_router)
+        .nest("/api/console", console_router)
         .layer(DefaultBodyLimit::max(
             state
                 .config

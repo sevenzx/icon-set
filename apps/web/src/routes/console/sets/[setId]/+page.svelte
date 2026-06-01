@@ -39,11 +39,11 @@
     batchFiles.reduce((total, file) => total + file.size, 0) + (archiveFile?.size ?? 0);
   $: batchTooLarge = batchTotalBytes > batchUploadMaxBytes;
 
-  /// 校验后台会话，未登录时跳转登录页。
+  /// 校验控制台会话，未登录时跳转登录页。
   async function guardSession() {
     const session = await getSession();
     if (!session.authenticated) {
-      await goto('/admin/login');
+      await goto('/console/login');
       return false;
     }
     return true;
@@ -261,19 +261,19 @@
   <nav class="breadcrumb" aria-label="面包屑">
     <a href="/">图标集合</a>
     <span>/</span>
-    <a href="/admin">图标后台</a>
+    <a href="/console">控制台</a>
     <span>/</span>
     <strong>{manifest.name}</strong>
   </nav>
 
   <section class="set-admin-hero panel panel-pad">
     <div class="hero-copy">
-      <span class="eyebrow">Admin / {manifest.id}</span>
+      <span class="eyebrow">Console / {manifest.id}</span>
       <h1>{manifest.name}</h1>
       <p>{manifest.icons.length} icons · manifest.json</p>
 
       <div class="hero-actions">
-        <a class="action secondary" href="/admin">返回后台</a>
+        <a class="action secondary" href="/console">返回控制台</a>
       </div>
     </div>
 

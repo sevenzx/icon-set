@@ -32,6 +32,12 @@ const SETS_INDEX_PATH: &str = "sets.json";
 const ICON_NAME_MAX_LEN: usize = 120;
 const OAUTH_STATE_TTL: Duration = Duration::minutes(10);
 
+enum PublicDataSource {
+    Demo,
+    UserWithoutConfig,
+    UserRepo(GitHubClient),
+}
+
 #[derive(Debug, Deserialize)]
 pub struct GithubCallbackQuery {
     code: String,
@@ -43,15 +49,37 @@ pub async fn health() -> Json<serde_json::Value> {
     Json(json!({ "ok": true }))
 }
 
-/// 列出内置演示图标集合。
-pub async fn list_sets() -> Json<Vec<IconSetSummary>> {
-    Json(demo::list_sets())
+/// 列出公开演示集合，登录后改为读取当前用户仓库。
+pub async fn list_sets(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<Json<Vec<IconSetSummary>>> {
+    match public_data_source(&state, &headers).await? {
+        PublicDataSource::Demo => Ok(Json(demo::list_sets())),
+        PublicDataSource::UserWithoutConfig => Ok(Json(Vec::new())),
+        PublicDataSource::UserRepo(github) => {
+            let (sets, _) = load_sets(&github).await?;
+            Ok(Json(sets))
+        }
+    }
 }
 
-/// 读取某个内置演示图标集合的 manifest。
-pub async fn get_set(Path(set_id): Path<String>) -> AppResult<Json<IconManifest>> {
+/// 读取公开演示集合，登录后改为读取当前用户仓库。
+pub async fn get_set(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(set_id): Path<String>,
+) -> AppResult<Json<IconManifest>> {
     validate_set_id(&set_id)?;
-    demo::get_set(&set_id).map(Json).ok_or(AppError::NotFound)
+
+    match public_data_source(&state, &headers).await? {
+        PublicDataSource::Demo => demo::get_set(&set_id).map(Json).ok_or(AppError::NotFound),
+        PublicDataSource::UserWithoutConfig => Err(AppError::NotFound),
+        PublicDataSource::UserRepo(github) => {
+            let (manifest, _) = load_manifest(&github, &set_id).await?;
+            Ok(Json(manifest))
+        }
+    }
 }
 
 /// 跳转到 GitHub OAuth 授权页。
@@ -83,7 +111,7 @@ pub async fn github_oauth_callback(
         .await?;
     let session = auth::create_session(&state, user_id).await?;
     let cookie = auth::session_cookie_value(&state, &session.cookie_token);
-    let mut response = Redirect::temporary("/admin").into_response();
+    let mut response = Redirect::temporary("/console").into_response();
     auth::set_cookie_header(response.headers_mut(), cookie)?;
 
     Ok(response)
@@ -690,6 +718,24 @@ async fn admin_github(state: &AppState, headers: &HeaderMap) -> AppResult<GitHub
         .repo_config(session.user_id, &state.secrets)
         .await?;
     Ok(GitHubClient::from_repo_config(repo_config))
+}
+
+async fn public_data_source(state: &AppState, headers: &HeaderMap) -> AppResult<PublicDataSource> {
+    let Some(session) = auth::current_session(state, headers).await? else {
+        return Ok(PublicDataSource::Demo);
+    };
+
+    let Some(repo_config) = state
+        .db
+        .repo_config_optional(session.user_id, &state.secrets)
+        .await?
+    else {
+        return Ok(PublicDataSource::UserWithoutConfig);
+    };
+
+    Ok(PublicDataSource::UserRepo(GitHubClient::from_repo_config(
+        repo_config,
+    )))
 }
 
 /// 读取 sets.json，缺失时返回空列表。

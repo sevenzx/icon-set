@@ -41,7 +41,7 @@
   async function guardSession() {
     const session = await getSession();
     if (!session.authenticated) {
-      await goto('/admin/login');
+      await goto('/console/login');
       return false;
     }
     sessionUser = session.user ?? null;
@@ -75,7 +75,7 @@
     }
   }
 
-  /// 加载后台集合列表。
+  /// 加载控制台集合列表。
   async function refreshSets() {
     loading = true;
     listError = '';
@@ -105,7 +105,7 @@
     try {
       const created = await createSet(newSet);
       newSet = { id: '', name: '', description: '' };
-      await goto(`/admin/sets/${created.id}`);
+      await goto(`/console/sets/${created.id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '创建集合失败');
     } finally {
@@ -146,10 +146,10 @@
     }
   }
 
-  /// 退出管理员后台。
+  /// 退出当前控制台会话。
   async function submitLogout() {
     await logout();
-    await goto('/admin/login');
+    await goto('/console/login');
   }
 
   /// 在前端生成和后端规则一致的 slug 预览。
@@ -173,13 +173,13 @@
 <nav class="breadcrumb" aria-label="面包屑">
   <a href="/">图标集合</a>
   <span>/</span>
-  <strong>图标后台</strong>
+  <strong>控制台</strong>
 </nav>
 
 <section class="admin-hero panel panel-pad">
   <div>
     <span class="eyebrow">Control Room</span>
-    <h1>图标后台</h1>
+    <h1>控制台</h1>
     <p>登录用户拥有独立的 GitHub 仓库配置。所有写入都会提交到当前账号配置的仓库。</p>
   </div>
   <button class="action secondary" type="button" on:click={submitLogout}>退出登录</button>
@@ -198,6 +198,13 @@
         {/if}
       </p>
     </div>
+    <a
+      class="guide-link"
+      href="/docs/github-repo-config"
+      title="查看 GitHub 仓库配置指引"
+    >
+      配置指引
+    </a>
   </div>
 
   <div class="repo-form-grid">
@@ -292,7 +299,7 @@
               <p>{set.description || '暂无描述'}</p>
             </div>
             <div class="row-actions">
-              <a class="action secondary" href={`/admin/sets/${set.id}`}>管理</a>
+              <a class="action secondary" href={`/console/sets/${set.id}`}>管理</a>
               <button class="action danger" type="button" on:click={() => openDeleteSetModal(set)}>
                 删除
               </button>
@@ -383,6 +390,28 @@
     color: rgba(246, 239, 217, 0.58);
     font-size: 12px;
     line-height: 1.6;
+  }
+
+  .guide-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid rgba(198, 255, 72, 0.28);
+    border-radius: 10px;
+    color: #c6ff48;
+    background: rgba(198, 255, 72, 0.07);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+  }
+
+  .guide-link:hover {
+    border-color: rgba(246, 239, 217, 0.36);
+    color: #f6efd9;
+    background: rgba(246, 239, 217, 0.08);
   }
 
   .create-card,

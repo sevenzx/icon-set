@@ -57,8 +57,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-/// 发送管理员写请求，除 session cookie 外额外携带当前会话的写 token。
-async function adminRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+/// 发送控制台请求，除 session cookie 外额外携带当前会话的写 token。
+async function consoleRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const adminToken = readAdminToken();
 
@@ -136,7 +136,7 @@ export function getSet(setId: string) {
   return request<IconManifest>(`/api/sets/${encodeURIComponent(setId)}`);
 }
 
-/// 退出当前管理员会话。
+/// 退出当前控制台会话。
 export async function logout() {
   try {
     return await request<SessionResponse>('/api/auth/logout', { method: 'POST' });
@@ -146,7 +146,7 @@ export async function logout() {
   }
 }
 
-/// 查询当前管理员会话状态。
+/// 查询当前控制台会话状态。
 export async function getSession() {
   const session = await request<SessionResponse>('/api/auth/session');
 
@@ -165,12 +165,12 @@ export async function getSession() {
 
 /// 读取当前用户的 GitHub 仓库配置。
 export function getRepoConfig() {
-  return adminRequest<RepoConfig>('/api/admin/config');
+  return consoleRequest<RepoConfig>('/api/console/config');
 }
 
 /// 保存当前用户的 GitHub 仓库配置，token 只会发送给后端加密存储。
 export function saveRepoConfig(payload: RepoConfigPayload) {
-  return adminRequest<RepoConfig>('/api/admin/config', {
+  return consoleRequest<RepoConfig>('/api/console/config', {
     method: 'PUT',
     body: JSON.stringify(payload)
   });
@@ -178,17 +178,17 @@ export function saveRepoConfig(payload: RepoConfigPayload) {
 
 /// 读取当前用户的图标集合。
 export function listAdminSets() {
-  return adminRequest<IconSetSummary[]>('/api/admin/sets');
+  return consoleRequest<IconSetSummary[]>('/api/console/sets');
 }
 
 /// 读取当前用户指定图标集合的 manifest。
 export function getAdminSet(setId: string) {
-  return adminRequest<IconManifest>(`/api/admin/sets/${encodeURIComponent(setId)}`);
+  return consoleRequest<IconManifest>(`/api/console/sets/${encodeURIComponent(setId)}`);
 }
 
 /// 创建新的图标集合。
 export function createSet(payload: CreateSetPayload) {
-  return adminRequest<IconSetSummary>('/api/admin/sets', {
+  return consoleRequest<IconSetSummary>('/api/console/sets', {
     method: 'POST',
     body: JSON.stringify(payload)
   });
@@ -196,7 +196,7 @@ export function createSet(payload: CreateSetPayload) {
 
 /// 更新图标集合基础信息。
 export function updateSet(setId: string, payload: UpdateSetPayload) {
-  return adminRequest<IconSetSummary>(`/api/admin/sets/${encodeURIComponent(setId)}`, {
+  return consoleRequest<IconSetSummary>(`/api/console/sets/${encodeURIComponent(setId)}`, {
     method: 'PATCH',
     body: JSON.stringify(payload)
   });
@@ -204,7 +204,7 @@ export function updateSet(setId: string, payload: UpdateSetPayload) {
 
 /// 删除图标集合及其登记的图片。
 export function deleteSet(setId: string) {
-  return adminRequest<IconSetSummary[]>(`/api/admin/sets/${encodeURIComponent(setId)}`, {
+  return consoleRequest<IconSetSummary[]>(`/api/console/sets/${encodeURIComponent(setId)}`, {
     method: 'DELETE'
   });
 }
@@ -215,7 +215,7 @@ export function uploadIcon(setId: string, name: string, file: File) {
   form.append('name', name);
   form.append('file', file);
 
-  return adminRequest<IconManifest>(`/api/admin/sets/${encodeURIComponent(setId)}/icons`, {
+  return consoleRequest<IconManifest>(`/api/console/sets/${encodeURIComponent(setId)}/icons`, {
     method: 'POST',
     body: form
   });
@@ -232,7 +232,7 @@ export function uploadIconsBatch(setId: string, files: File[], archive: File | n
     form.append('archive', archive);
   }
 
-  return adminRequest<IconManifest>(`/api/admin/sets/${encodeURIComponent(setId)}/icons/batch`, {
+  return consoleRequest<IconManifest>(`/api/console/sets/${encodeURIComponent(setId)}/icons/batch`, {
     method: 'POST',
     body: form
   });
@@ -240,8 +240,8 @@ export function uploadIconsBatch(setId: string, files: File[], archive: File | n
 
 /// 修改指定图标名称。
 export function renameIcon(setId: string, iconId: string, name: string) {
-  return adminRequest<IconManifest>(
-    `/api/admin/sets/${encodeURIComponent(setId)}/icons/${encodeURIComponent(iconId)}`,
+  return consoleRequest<IconManifest>(
+    `/api/console/sets/${encodeURIComponent(setId)}/icons/${encodeURIComponent(iconId)}`,
     {
       method: 'PATCH',
       body: JSON.stringify({ name })
@@ -251,8 +251,8 @@ export function renameIcon(setId: string, iconId: string, name: string) {
 
 /// 删除指定图标和对应 GitHub 文件。
 export function removeIcon(setId: string, iconId: string) {
-  return adminRequest<IconManifest>(
-    `/api/admin/sets/${encodeURIComponent(setId)}/icons/${encodeURIComponent(iconId)}`,
+  return consoleRequest<IconManifest>(
+    `/api/console/sets/${encodeURIComponent(setId)}/icons/${encodeURIComponent(iconId)}`,
     { method: 'DELETE' }
   );
 }
