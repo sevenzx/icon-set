@@ -3,7 +3,6 @@ use reqwest::{Method, StatusCode, header};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
-    config::Config,
     db::RepoConfig,
     error::{AppError, AppResult},
 };
@@ -56,24 +55,6 @@ struct DeleteFileRequest<'a> {
 }
 
 impl GitHubClient {
-    /// 创建公开案例仓库的 GitHub 内容 API 客户端。
-    pub fn from_public_config(config: &Config) -> Self {
-        Self {
-            repo: GitHubRepo {
-                owner: config.github_owner.clone(),
-                repo: config.github_repo.clone(),
-                branch: config.github_branch.clone(),
-                token: config.github_token.clone(),
-                raw_base_url: raw_base_url(
-                    &config.github_owner,
-                    &config.github_repo,
-                    &config.github_branch,
-                ),
-            },
-            http: reqwest::Client::new(),
-        }
-    }
-
     /// 创建当前登录用户配置仓库的 GitHub 内容 API 客户端。
     pub fn from_repo_config(config: RepoConfig) -> Self {
         let raw_base_url = raw_base_url(&config.owner, &config.repo, &config.branch);

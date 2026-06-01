@@ -5,9 +5,7 @@ FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 ARG VITE_API_BASE_URL=
-ARG VITE_RAW_ASSET_BASE_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-ENV VITE_RAW_ASSET_BASE_URL=$VITE_RAW_ASSET_BASE_URL
 
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json

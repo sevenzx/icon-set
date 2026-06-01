@@ -3,6 +3,7 @@ mod cleanup;
 mod config;
 mod crypto;
 mod db;
+mod demo;
 mod error;
 mod github;
 mod handlers;
@@ -21,14 +22,11 @@ use axum::{
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::{
-    config::Config, crypto::SecretBox, db::Database, github::GitHubClient, oauth::GithubOAuthClient,
-};
+use crate::{config::Config, crypto::SecretBox, db::Database, oauth::GithubOAuthClient};
 
 #[derive(Clone)]
 pub struct AppState {
     pub(crate) config: Config,
-    pub(crate) github: GitHubClient,
     pub(crate) db: Database,
     pub(crate) secrets: SecretBox,
     pub(crate) oauth: GithubOAuthClient,
@@ -47,14 +45,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = Config::from_env()?;
-    let github = GitHubClient::from_public_config(&config);
     let db = Database::connect(&config.database_url).await?;
     let secrets = SecretBox::from_base64_key(&config.encryption_key)?;
     db.migrate_sensitive_plaintext(&secrets).await?;
     let oauth = GithubOAuthClient::new(config.clone());
     let state = AppState {
         config: config.clone(),
-        github,
         db,
         secrets,
         oauth,

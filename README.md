@@ -7,9 +7,9 @@
 ## 功能
 
 - 按 set 管理不同图标库，例如 `emby`、`sub`
-- 未登录用户只看到公开示例集合，不展示后台入口
+- 未登录用户只看到内置演示集合，不展示后台入口
 - GitHub OAuth 登录，后台入口按登录用户隔离
-- 每个登录用户独立配置 `GITHUB_OWNER`、`GITHUB_REPO`、`GITHUB_BRANCH`、`GITHUB_TOKEN`
+- 每个登录用户独立配置 GitHub owner、repo、branch 和 token
 - 用户 GitHub Token 使用服务端 `ENCRYPTION_KEY` 加密后存入 Postgres
 - 前台支持搜索图标、复制图标 Raw URL、复制集合 Manifest URL、查看大图和分页
 - 后台支持创建 set、编辑集合信息、上传图片、批量上传图片或 zip 压缩包
@@ -21,7 +21,7 @@
 
 ## 数据流
 
-- 公开 API：读取服务端环境变量中配置的示例 GitHub 仓库，用于首页和未登录浏览。
+- 公开 API：返回内置演示数据，用于首页和未登录浏览，不读取真实 GitHub 仓库。
 - 登录 API：通过 GitHub OAuth 建立 session，session 存在 Postgres。
 - 后台 API：根据当前登录用户读取 `repo_config`，解密该用户的 GitHub Token 后写入对应仓库。
 - 前端不会接触 GitHub 写权限 token，后台接口只识别当前登录 session。
@@ -136,9 +136,6 @@ DATABASE_URL=postgres://icon_set:icon_set_password@127.0.0.1:5432/icon_set
 ENCRYPTION_KEY=openssl-rand-base64-32-output
 GITHUB_OAUTH_CLIENT_ID=your-github-oauth-client-id
 GITHUB_OAUTH_CLIENT_SECRET=your-github-oauth-client-secret
-GITHUB_OWNER=your-demo-owner
-GITHUB_REPO=your-demo-repo
-GITHUB_BRANCH=main
 CORS_ORIGIN=http://localhost:5173
 COOKIE_SECURE=false
 ```
@@ -209,9 +206,6 @@ APP_BASE_URL=https://icon-set.example.com
 ENCRYPTION_KEY=openssl-rand-base64-32-output
 GITHUB_OAUTH_CLIENT_ID=your-github-oauth-client-id
 GITHUB_OAUTH_CLIENT_SECRET=your-github-oauth-client-secret
-GITHUB_OWNER=your-demo-owner
-GITHUB_REPO=your-demo-repo
-GITHUB_BRANCH=main
 CORS_ORIGIN=https://icon-set.example.com
 COOKIE_SECURE=true
 ```

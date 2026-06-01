@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::{
     AppState, auth,
     db::RepoConfig,
+    demo,
     error::{AppError, AppResult},
     github::GitHubClient,
     limits,
@@ -42,20 +43,15 @@ pub async fn health() -> Json<serde_json::Value> {
     Json(json!({ "ok": true }))
 }
 
-/// 列出公开图标集合。
-pub async fn list_sets(State(state): State<AppState>) -> AppResult<Json<Vec<IconSetSummary>>> {
-    let (sets, _) = load_sets(&state.github).await?;
-    Ok(Json(sets))
+/// 列出内置演示图标集合。
+pub async fn list_sets() -> Json<Vec<IconSetSummary>> {
+    Json(demo::list_sets())
 }
 
-/// 读取某个公开图标集合的 manifest。
-pub async fn get_set(
-    State(state): State<AppState>,
-    Path(set_id): Path<String>,
-) -> AppResult<Json<IconManifest>> {
+/// 读取某个内置演示图标集合的 manifest。
+pub async fn get_set(Path(set_id): Path<String>) -> AppResult<Json<IconManifest>> {
     validate_set_id(&set_id)?;
-    let (manifest, _) = load_manifest(&state.github, &set_id).await?;
-    Ok(Json(manifest))
+    demo::get_set(&set_id).map(Json).ok_or(AppError::NotFound)
 }
 
 /// 跳转到 GitHub OAuth 授权页。

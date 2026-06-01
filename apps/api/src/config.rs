@@ -10,10 +10,6 @@ pub struct Config {
     pub encryption_key: String,
     pub github_oauth_client_id: String,
     pub github_oauth_client_secret: String,
-    pub github_token: Option<String>,
-    pub github_owner: String,
-    pub github_repo: String,
-    pub github_branch: String,
     pub cors_origin: String,
     pub cookie_secure: bool,
     pub session_cookie_name: String,
@@ -31,7 +27,7 @@ pub enum ConfigError {
 impl Config {
     /// 从环境变量加载后端运行配置。
     pub fn from_env() -> Result<Self, ConfigError> {
-        // 本地开发时优先使用 apps/api/.env，避免 shell 中的 GITHUB_TOKEN 覆盖项目配置。
+        // 本地开发时优先使用 apps/api/.env，避免 shell 中的环境变量覆盖项目配置。
         if Path::new("apps/api/.env").exists() {
             dotenvy::from_path_override("apps/api/.env").ok();
         } else {
@@ -49,9 +45,6 @@ impl Config {
         let encryption_key = required_env("ENCRYPTION_KEY")?;
         let github_oauth_client_id = required_env("GITHUB_OAUTH_CLIENT_ID")?;
         let github_oauth_client_secret = required_env("GITHUB_OAUTH_CLIENT_SECRET")?;
-        let github_owner = required_env("GITHUB_OWNER")?;
-        let github_repo = required_env("GITHUB_REPO")?;
-        let github_branch = env_or_default("GITHUB_BRANCH", "main");
         let cors_origin = env_or_default("CORS_ORIGIN", "http://localhost:5173");
         let cookie_secure = parse_bool_env("COOKIE_SECURE", false)?;
         let max_upload_bytes = parse_usize_env("MAX_UPLOAD_BYTES", 5 * 1024 * 1024)?;
@@ -63,12 +56,6 @@ impl Config {
             encryption_key,
             github_oauth_client_id,
             github_oauth_client_secret,
-            github_token: env::var("GITHUB_TOKEN")
-                .ok()
-                .filter(|value| !value.is_empty()),
-            github_owner,
-            github_repo,
-            github_branch,
             cors_origin,
             cookie_secure,
             session_cookie_name: "icon_set_session".to_string(),
