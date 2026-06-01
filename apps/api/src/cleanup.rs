@@ -13,18 +13,21 @@ pub fn spawn_cleanup_task(state: AppState) {
 
         loop {
             interval.tick().await;
-            let removed_sessions = auth::cleanup_expired_sessions(&state).await;
-            let removed_login_limits = middleware::cleanup_expired_login_rate_limits(&state).await;
+            let removed_sessions = match auth::cleanup_expired_sessions(&state).await {
+                Ok(count) => count,
+                Err(err) => {
+                    tracing::warn!(error = %err, "failed to clean expired database records");
+                    0
+                }
+            };
             let removed_duplicate_submissions =
                 middleware::cleanup_expired_duplicate_submissions(&state).await;
 
-            if removed_sessions > 0 || removed_login_limits > 0 || removed_duplicate_submissions > 0
-            {
+            if removed_sessions > 0 || removed_duplicate_submissions > 0 {
                 tracing::debug!(
                     removed_sessions,
-                    removed_login_limits,
                     removed_duplicate_submissions,
-                    "cleaned expired in-memory records"
+                    "cleaned expired runtime records"
                 );
             }
         }

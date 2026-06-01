@@ -1,7 +1,18 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { getSession } from '$lib/api';
+  import { authenticated } from '$lib/auth-state';
   import ToastHost from '$lib/ToastHost.svelte';
 
   const repositoryUrl = 'https://github.com/sevenzx/icon-set';
+
+  onMount(async () => {
+    try {
+      await getSession();
+    } catch {
+      authenticated.set(false);
+    }
+  });
 </script>
 
 <svelte:head>
@@ -18,21 +29,26 @@
       <span>IS</span>
       <strong>Icon Set</strong>
     </a>
-    <a
-      class="repo-link"
-      href={repositoryUrl}
-      target="_blank"
-      rel="noreferrer"
-      aria-label="打开 GitHub 仓库 sevenzx/icon-set"
-      title="sevenzx/icon-set"
-    >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.23c-3.34.73-4.04-1.42-4.04-1.42-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.23 1.91 1.23 3.22 0 4.61-2.81 5.62-5.49 5.92.43.37.82 1.1.82 2.22v3.3c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"
-          fill="currentColor"
-        />
-      </svg>
-    </a>
+    <nav class="top-actions" aria-label="站点操作">
+      <a class="login-link" href={$authenticated ? '/admin' : '/admin/login'}>
+        {$authenticated ? '控制台' : '登录'}
+      </a>
+      <a
+        class="repo-link"
+        href={repositoryUrl}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="打开 GitHub 仓库 sevenzx/icon-set"
+        title="sevenzx/icon-set"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.23c-3.34.73-4.04-1.42-4.04-1.42-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.23 1.91 1.23 3.22 0 4.61-2.81 5.62-5.49 5.92.43.37.82 1.1.82 2.22v3.3c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"
+            fill="currentColor"
+          />
+        </svg>
+      </a>
+    </nav>
   </header>
 
   <main>
@@ -319,6 +335,7 @@
   }
 
   .brand-lockup,
+  .login-link,
   .repo-link {
     display: inline-flex;
     align-items: center;
@@ -350,6 +367,18 @@
     letter-spacing: 0;
   }
 
+  .top-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .login-link {
+    justify-content: center;
+    padding: 0 14px;
+    color: #f6efd9;
+  }
+
   .repo-link {
     justify-content: center;
     width: 40px;
@@ -363,6 +392,7 @@
   }
 
   .repo-link:hover,
+  .login-link:hover,
   .brand-lockup:hover {
     border-color: rgba(198, 255, 72, 0.42);
     background: rgba(24, 26, 20, 0.78);
@@ -385,6 +415,18 @@
   }
 
   @media (max-width: 460px) {
+    .shell-topbar {
+      gap: 10px;
+    }
+
+    .top-actions {
+      gap: 6px;
+    }
+
+    .login-link {
+      padding: 0 10px;
+    }
+
     .repo-link {
       width: 40px;
       flex: 0 0 40px;

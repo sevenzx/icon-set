@@ -1,12 +1,15 @@
 mod auth;
 mod cleanup;
 mod config;
+mod crypto;
+mod db;
 mod error;
 mod github;
 mod handlers;
 mod limits;
 mod middleware;
 mod models;
+mod oauth;
 
 use axum::{
     Router,
@@ -18,14 +21,17 @@ use axum::{
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::{auth::SessionStore, config::Config, github::GitHubClient};
+use crate::{
+    config::Config, crypto::SecretBox, db::Database, github::GitHubClient, oauth::GithubOAuthClient,
+};
 
 #[derive(Clone)]
 pub struct AppState {
     pub(crate) config: Config,
     pub(crate) github: GitHubClient,
-    pub(crate) sessions: SessionStore,
-    pub(crate) login_rate_limits: middleware::LoginRateLimitStore,
+    pub(crate) db: Database,
+    pub(crate) secrets: SecretBox,
+    pub(crate) oauth: GithubOAuthClient,
     pub(crate) duplicate_submissions: middleware::DuplicateSubmissionStore,
 }
 
@@ -41,12 +47,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = Config::from_env()?;
-    let github = GitHubClient::new(config.clone());
+    let github = GitHubClient::from_public_config(&config);
+    let db = Database::connect(&config.database_url).await?;
+    let secrets = SecretBox::from_base64_key(&config.encryption_key)?;
+    db.migrate_sensitive_plaintext(&secrets).await?;
+    let oauth = GithubOAuthClient::new(config.clone());
     let state = AppState {
         config: config.clone(),
         github,
-        sessions: auth::new_session_store(),
-        login_rate_limits: middleware::new_login_rate_limit_store(),
+        db,
+        secrets,
+        oauth,
         duplicate_submissions: middleware::new_duplicate_submission_store(),
     };
     cleanup::spawn_cleanup_task(state.clone());
@@ -78,10 +89,19 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         .allow_credentials(true);
 
     let admin_router = Router::new()
-        .route("/sets", post(handlers::create_set))
+        .route(
+            "/config",
+            get(handlers::get_repo_config).put(handlers::save_repo_config),
+        )
+        .route(
+            "/sets",
+            get(handlers::list_admin_sets).post(handlers::create_set),
+        )
         .route(
             "/sets/{set_id}",
-            patch(handlers::update_set).delete(handlers::delete_set),
+            get(handlers::get_admin_set)
+                .patch(handlers::update_set)
+                .delete(handlers::delete_set),
         )
         .route("/sets/{set_id}/icons", post(handlers::upload_icon))
         .route(
@@ -92,7 +112,10 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
             "/sets/{set_id}/icons/{icon_id}",
             patch(handlers::rename_icon).delete(handlers::delete_icon),
         )
-        .route_layer(axum_middleware::from_fn(middleware::audit_admin))
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::audit_admin,
+        ))
         .route_layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::prevent_duplicate_submit,
@@ -110,12 +133,10 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         .route("/api/health", get(handlers::health))
         .route("/api/sets", get(handlers::list_sets))
         .route("/api/sets/{set_id}", get(handlers::get_set))
+        .route("/api/auth/github/start", get(handlers::github_oauth_start))
         .route(
-            "/api/auth/login",
-            post(handlers::login).route_layer(axum_middleware::from_fn_with_state(
-                state.clone(),
-                middleware::limit_login,
-            )),
+            "/api/auth/github/callback",
+            get(handlers::github_oauth_callback),
         )
         .route("/api/auth/logout", post(handlers::logout))
         .route("/api/auth/session", get(handlers::session))

@@ -4,8 +4,8 @@
   import { onMount } from 'svelte';
   import DeleteConfirmModal from '$lib/DeleteConfirmModal.svelte';
   import {
+    getAdminSet,
     getSession,
-    getSet,
     removeIcon,
     renameIcon,
     updateSet,
@@ -62,7 +62,7 @@
     }
 
     try {
-      manifest = await getSet(setId);
+      manifest = await getAdminSet(setId);
       metaForm = {
         name: manifest.name,
         description: manifest.description
@@ -273,7 +273,6 @@
       <p>{manifest.icons.length} icons · manifest.json</p>
 
       <div class="hero-actions">
-        <a class="action secondary" href={`/sets/${manifest.id}`}>查看前台</a>
         <a class="action secondary" href="/admin">返回后台</a>
       </div>
     </div>

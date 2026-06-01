@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
+use std::error::Error as StdError;
 use thiserror::Error;
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -15,8 +16,6 @@ pub enum AppError {
     Unauthorized,
     #[error("请求来源不可信")]
     Forbidden,
-    #[error("请求过于频繁，请稍后再试")]
-    RateLimited,
     #[error("重复提交，请稍后再试")]
     DuplicateSubmit,
     #[error("没有找到资源")]
@@ -42,7 +41,6 @@ impl IntoResponse for AppError {
         let status = match self {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden => StatusCode::FORBIDDEN,
-            Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             Self::DuplicateSubmit => StatusCode::CONFLICT,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
@@ -59,7 +57,16 @@ impl IntoResponse for AppError {
 impl From<reqwest::Error> for AppError {
     /// 将 reqwest 错误归类为 GitHub 上游错误。
     fn from(err: reqwest::Error) -> Self {
-        Self::GitHub(err.to_string())
+        let mut message = err.to_string();
+        let mut source = err.source();
+
+        while let Some(err) = source {
+            message.push_str(": ");
+            message.push_str(&err.to_string());
+            source = err.source();
+        }
+
+        Self::GitHub(message)
     }
 }
 

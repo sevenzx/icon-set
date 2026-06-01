@@ -35,16 +35,42 @@ pub struct IconEntry {
     pub md5: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct LoginRequest {
-    pub password: String,
-}
-
 #[derive(Debug, Serialize)]
 pub struct SessionResponse {
     pub authenticated: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub admin_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<UserProfile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo_config: Option<RepoConfigResponse>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserProfile {
+    pub id: String,
+    pub login: String,
+    pub name: Option<String>,
+    pub email: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RepoConfigResponse {
+    pub configured: bool,
+    pub owner: String,
+    pub repo: String,
+    pub branch: String,
+    pub token_configured: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RepoConfigRequest {
+    pub owner: String,
+    pub repo: String,
+    pub branch: String,
+    #[serde(default)]
+    pub token: String,
 }
 
 #[derive(Debug, Deserialize)]

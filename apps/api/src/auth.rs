@@ -1,93 +1,58 @@
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
-
 use axum::http::{HeaderMap, HeaderValue, header};
-use tokio::sync::RwLock;
+use chrono::Duration;
 use uuid::Uuid;
 
 use crate::{
     AppState,
+    db::AuthSession,
     error::{AppError, AppResult},
 };
 
-const SESSION_TTL: Duration = Duration::from_secs(60 * 60 * 24 * 7);
+pub const SESSION_TTL: Duration = Duration::days(7);
 const ADMIN_TOKEN_HEADER: &str = "x-admin-token";
-
-#[derive(Clone)]
-pub struct SessionRecord {
-    pub expires_at: SystemTime,
-    pub admin_token: String,
-}
 
 pub struct CreatedSession {
     pub cookie_token: String,
-    pub admin_token: String,
 }
 
-pub type SessionStore = Arc<RwLock<HashMap<String, SessionRecord>>>;
-
-/// 创建内存会话存储。
-pub fn new_session_store() -> SessionStore {
-    Arc::new(RwLock::new(HashMap::new()))
-}
-
-/// 创建新的管理员会话并返回 Cookie token 和写 token。
-pub async fn create_session(state: &AppState) -> CreatedSession {
+/// 创建新的登录会话并返回 Cookie token 和写 token。
+pub async fn create_session(state: &AppState, user_id: i64) -> AppResult<CreatedSession> {
     let cookie_token = Uuid::new_v4().to_string();
     let admin_token = Uuid::new_v4().to_string();
-    let expires_at = SystemTime::now() + SESSION_TTL;
-    state.sessions.write().await.insert(
-        cookie_token.clone(),
-        SessionRecord {
-            expires_at,
-            admin_token: admin_token.clone(),
-        },
-    );
+    state
+        .db
+        .create_session(&cookie_token, user_id, &admin_token, SESSION_TTL)
+        .await?;
 
-    CreatedSession {
-        cookie_token,
-        admin_token,
-    }
+    Ok(CreatedSession { cookie_token })
 }
 
 /// 删除当前请求中的会话。
-pub async fn destroy_session(state: &AppState, headers: &HeaderMap) {
+pub async fn destroy_session(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
     if let Some(token) = read_session_cookie(headers, &state.config.session_cookie_name) {
-        state.sessions.write().await.remove(&token);
+        state.db.delete_session(&token).await?;
     }
+    Ok(())
 }
 
-/// 清理已经过期的管理员会话。
-pub async fn cleanup_expired_sessions(state: &AppState) -> usize {
-    let now = SystemTime::now();
-    let mut sessions = state.sessions.write().await;
-    let before = sessions.len();
-
-    sessions.retain(|_, record| record.expires_at > now);
-    before.saturating_sub(sessions.len())
+/// 清理已经过期的登录会话和 OAuth state。
+pub async fn cleanup_expired_sessions(state: &AppState) -> AppResult<u64> {
+    state.db.cleanup_expired().await
 }
 
-/// 检查当前请求是否包含有效管理员会话。
-pub async fn is_authenticated(state: &AppState, headers: &HeaderMap) -> bool {
+/// 读取当前请求对应的登录会话。
+pub async fn current_session(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> AppResult<Option<AuthSession>> {
     let Some(token) = read_session_cookie(headers, &state.config.session_cookie_name) else {
-        return false;
+        return Ok(None);
     };
-    let now = SystemTime::now();
-    let mut sessions = state.sessions.write().await;
-
-    // 读取时顺手清理过期会话，避免长期运行时无界增长。
-    sessions.retain(|_, record| record.expires_at > now);
-    sessions.contains_key(&token)
+    state.db.get_session(&token).await
 }
 
-/// 要求当前请求同时具备管理员会话和当前会话的写 token。
+/// 要求当前请求同时具备登录会话和当前会话的写 token。
 pub async fn require_admin_access(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
-    let Some(cookie_token) = read_session_cookie(headers, &state.config.session_cookie_name) else {
-        return Err(AppError::Unauthorized);
-    };
     let Some(admin_token) = headers
         .get(ADMIN_TOKEN_HEADER)
         .and_then(|value| value.to_str().ok())
@@ -95,26 +60,15 @@ pub async fn require_admin_access(state: &AppState, headers: &HeaderMap) -> AppR
         return Err(AppError::Unauthorized);
     };
 
-    let now = SystemTime::now();
-    let mut sessions = state.sessions.write().await;
-
-    // 读取时顺手清理过期会话，避免长期运行时无界增长。
-    sessions.retain(|_, record| record.expires_at > now);
-
-    let Some(record) = sessions.get(&cookie_token) else {
+    let Some(session) = current_session(state, headers).await? else {
         return Err(AppError::Unauthorized);
     };
 
-    if constant_time_eq(admin_token, &record.admin_token) {
+    if constant_time_eq(admin_token, &session.admin_token) {
         return Ok(());
     }
 
     Err(AppError::Unauthorized)
-}
-
-/// 用固定时间比较降低密码长度相同时的计时侧信道。
-pub fn password_matches(input: &str, expected: &str) -> bool {
-    constant_time_eq(input, expected)
 }
 
 fn constant_time_eq(input: &str, expected: &str) -> bool {
@@ -138,7 +92,7 @@ pub fn session_cookie_value(state: &AppState, token: &str) -> String {
         "{}={}; Path=/; Max-Age={}; HttpOnly; SameSite=Lax",
         state.config.session_cookie_name,
         token,
-        SESSION_TTL.as_secs()
+        SESSION_TTL.num_seconds()
     );
     if state.config.cookie_secure {
         value.push_str("; Secure");
@@ -175,17 +129,4 @@ fn read_session_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String>
         let value = parts.next()?;
         (name == cookie_name).then(|| value.to_string())
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::password_matches;
-
-    #[test]
-    fn password_matches_requires_exact_value() {
-        assert!(password_matches("secret", "secret"));
-        assert!(!password_matches("secret", "Secret"));
-        assert!(!password_matches("secret", "secret1"));
-        assert!(!password_matches("", "secret"));
-    }
 }

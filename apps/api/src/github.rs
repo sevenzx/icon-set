@@ -4,13 +4,23 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
     config::Config,
+    db::RepoConfig,
     error::{AppError, AppResult},
 };
 
 #[derive(Clone)]
 pub struct GitHubClient {
-    config: Config,
+    repo: GitHubRepo,
     http: reqwest::Client,
+}
+
+#[derive(Clone)]
+struct GitHubRepo {
+    owner: String,
+    repo: String,
+    branch: String,
+    token: Option<String>,
+    raw_base_url: String,
 }
 
 pub struct GitHubFile {
@@ -46,10 +56,36 @@ struct DeleteFileRequest<'a> {
 }
 
 impl GitHubClient {
-    /// 创建 GitHub 内容 API 客户端。
-    pub fn new(config: Config) -> Self {
+    /// 创建公开案例仓库的 GitHub 内容 API 客户端。
+    pub fn from_public_config(config: &Config) -> Self {
         Self {
-            config,
+            repo: GitHubRepo {
+                owner: config.github_owner.clone(),
+                repo: config.github_repo.clone(),
+                branch: config.github_branch.clone(),
+                token: config.github_token.clone(),
+                raw_base_url: raw_base_url(
+                    &config.github_owner,
+                    &config.github_repo,
+                    &config.github_branch,
+                ),
+            },
+            http: reqwest::Client::new(),
+        }
+    }
+
+    /// 创建当前登录用户配置仓库的 GitHub 内容 API 客户端。
+    pub fn from_repo_config(config: RepoConfig) -> Self {
+        let raw_base_url = raw_base_url(&config.owner, &config.repo, &config.branch);
+
+        Self {
+            repo: GitHubRepo {
+                owner: config.owner,
+                repo: config.repo,
+                branch: config.branch,
+                token: Some(config.token),
+                raw_base_url,
+            },
             http: reqwest::Client::new(),
         }
     }
@@ -59,7 +95,7 @@ impl GitHubClient {
         let url = self.content_url(path);
         let response = self
             .request(Method::GET, url)
-            .query(&[("ref", self.config.github_branch.as_str())])
+            .query(&[("ref", self.repo.branch.as_str())])
             .send()
             .await?;
 
@@ -110,7 +146,7 @@ impl GitHubClient {
         let payload = PutFileRequest {
             message,
             content: STANDARD.encode(content),
-            branch: &self.config.github_branch,
+            branch: &self.repo.branch,
             sha,
         };
         let response = self
@@ -133,7 +169,7 @@ impl GitHubClient {
         let payload = DeleteFileRequest {
             message,
             sha,
-            branch: &self.config.github_branch,
+            branch: &self.repo.branch,
         };
         let response = self
             .request(Method::DELETE, self.content_url(path))
@@ -150,7 +186,11 @@ impl GitHubClient {
 
     /// 返回仓库文件对应的 raw 地址。
     pub fn raw_url(&self, path: &str) -> String {
-        self.config.raw_url(path)
+        format!(
+            "{}/{}",
+            self.repo.raw_base_url.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        )
     }
 
     /// 构建 GitHub contents API 地址。
@@ -164,7 +204,7 @@ impl GitHubClient {
 
         format!(
             "https://api.github.com/repos/{}/{}/contents/{}",
-            self.config.github_owner, self.config.github_repo, encoded_path
+            self.repo.owner, self.repo.repo, encoded_path
         )
     }
 
@@ -177,7 +217,7 @@ impl GitHubClient {
             .header(header::ACCEPT, "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28");
 
-        if let Some(token) = &self.config.github_token {
+        if let Some(token) = &self.repo.token {
             builder = builder.bearer_auth(token);
         }
 
@@ -186,9 +226,9 @@ impl GitHubClient {
 
     /// 写操作前确认已经配置 GitHub Token。
     fn ensure_write_token(&self) -> AppResult<()> {
-        if self.config.github_token.is_none() {
+        if self.repo.token.is_none() {
             return Err(AppError::BadRequest(
-                "缺少 GITHUB_TOKEN，无法写入 GitHub".to_string(),
+                "缺少 GitHub Token，无法写入 GitHub".to_string(),
             ));
         }
 
@@ -202,18 +242,18 @@ impl GitHubClient {
             .text()
             .await
             .unwrap_or_else(|_| "<empty>".to_string());
-        let repo = format!("{}/{}", self.config.github_owner, self.config.github_repo);
+        let repo = format!("{}/{}", self.repo.owner, self.repo.repo);
         let compact_body = body.chars().take(500).collect::<String>();
         let message = match status {
             StatusCode::UNAUTHORIZED => {
-                "GITHUB_TOKEN 无效或已过期，请重新生成 token 后重启后端".to_string()
+                "GitHub Token 无效或已过期，请重新生成后在后台保存".to_string()
             }
             StatusCode::FORBIDDEN => format!(
-                "GitHub 拒绝写入 {repo}，请确认 GITHUB_TOKEN 对该仓库有 Contents: Read and write 权限"
+                "GitHub 拒绝写入 {repo}，请确认 Token 对该仓库有 Contents: Read and write 权限"
             ),
             StatusCode::NOT_FOUND => format!(
-                "GitHub 找不到 {repo} 或分支 {}，也可能是当前 GITHUB_TOKEN 没有授权访问这个仓库",
-                self.config.github_branch
+                "GitHub 找不到 {repo} 或分支 {}，也可能是当前 Token 没有授权访问这个仓库",
+                self.repo.branch
             ),
             StatusCode::CONFLICT => "GitHub 文件版本冲突，请刷新后重试".to_string(),
             _ => format!("{status}: {compact_body}"),
@@ -221,4 +261,8 @@ impl GitHubClient {
 
         AppError::GitHub(message)
     }
+}
+
+fn raw_base_url(owner: &str, repo: &str, branch: &str) -> String {
+    format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}")
 }

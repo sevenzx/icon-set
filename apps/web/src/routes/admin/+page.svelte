@@ -2,13 +2,24 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import DeleteConfirmModal from '$lib/DeleteConfirmModal.svelte';
-  import { createSet, deleteSet, getSession, listSets, logout } from '$lib/api';
+  import {
+    createSet,
+    deleteSet,
+    getRepoConfig,
+    getSession,
+    listAdminSets,
+    logout,
+    saveRepoConfig
+  } from '$lib/api';
   import { toast } from '$lib/toast';
-  import type { IconSetSummary } from '$lib/types';
+  import type { IconSetSummary, RepoConfig, UserProfile } from '$lib/types';
 
   let sets: IconSetSummary[] = [];
+  let sessionUser: UserProfile | null = null;
+  let repoConfig: RepoConfig | null = null;
   let loading = true;
   let saving = false;
+  let savingConfig = false;
   let deleting = false;
   let listError = '';
   let deleteTarget: IconSetSummary | null = null;
@@ -17,6 +28,14 @@
     name: '',
     description: ''
   };
+  let repoForm = {
+    owner: '',
+    repo: '',
+    branch: 'main',
+    token: ''
+  };
+
+  $: repoConfigured = Boolean(repoConfig?.configured);
 
   /// 校验当前管理员会话，未登录时跳转登录页。
   async function guardSession() {
@@ -25,7 +44,35 @@
       await goto('/admin/login');
       return false;
     }
+    sessionUser = session.user ?? null;
     return true;
+  }
+
+  /// 加载当前用户的 GitHub 仓库配置。
+  async function refreshRepoConfig() {
+    repoConfig = await getRepoConfig();
+    repoForm = {
+      owner: repoConfig.owner || sessionUser?.login || '',
+      repo: repoConfig.repo || '',
+      branch: repoConfig.branch || 'main',
+      token: ''
+    };
+  }
+
+  /// 保存当前用户的 GitHub 仓库配置。
+  async function submitRepoConfig() {
+    savingConfig = true;
+
+    try {
+      repoConfig = await saveRepoConfig(repoForm);
+      repoForm.token = '';
+      toast.info('GitHub 仓库配置已保存');
+      await refreshSets();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '仓库配置保存失败');
+    } finally {
+      savingConfig = false;
+    }
   }
 
   /// 加载后台集合列表。
@@ -34,7 +81,11 @@
     listError = '';
 
     try {
-      sets = await listSets();
+      if (!repoConfigured) {
+        sets = [];
+        return;
+      }
+      sets = await listAdminSets();
     } catch (err) {
       const message = err instanceof Error ? err.message : '集合加载失败';
       if (sets.length > 0) {
@@ -113,6 +164,7 @@
 
   onMount(async () => {
     if (await guardSession()) {
+      await refreshRepoConfig();
       await refreshSets();
     }
   });
@@ -128,10 +180,62 @@
   <div>
     <span class="eyebrow">Control Room</span>
     <h1>图标后台</h1>
-    <p>创建 set、进入集合上传图片、编辑 name 或删除资源。所有写入都会提交到 GitHub 仓库。</p>
+    <p>登录用户拥有独立的 GitHub 仓库配置。所有写入都会提交到当前账号配置的仓库。</p>
   </div>
   <button class="action secondary" type="button" on:click={submitLogout}>退出登录</button>
 </section>
+
+<form class="panel panel-pad repo-card" on:submit|preventDefault={submitRepoConfig}>
+  <div class="list-head">
+    <div>
+      <span class="eyebrow">Repository</span>
+      <h2>GitHub 仓库配置</h2>
+      <p>
+        {#if repoConfigured}
+          当前仓库：{repoConfig?.owner}/{repoConfig?.repo} · {repoConfig?.branch}
+        {:else}
+          首次使用需要配置一个可写入的 GitHub 仓库。
+        {/if}
+      </p>
+    </div>
+  </div>
+
+  <div class="repo-form-grid">
+    <label class="field">
+      <span>Owner</span>
+      <input class="input" bind:value={repoForm.owner} placeholder={sessionUser?.login ?? 'github-user'} />
+    </label>
+    <label class="field">
+      <span>Repo</span>
+      <input class="input" bind:value={repoForm.repo} placeholder="icon-set-assets" />
+    </label>
+    <label class="field">
+      <span>Branch</span>
+      <input class="input" bind:value={repoForm.branch} placeholder="main" />
+    </label>
+    <label class="field token-field">
+      <span>GitHub Token</span>
+      <input
+        class="input"
+        bind:value={repoForm.token}
+        type="password"
+        autocomplete="off"
+        placeholder={repoConfig?.token_configured ? '留空则继续使用已保存 token' : 'Contents 读写 token'}
+      />
+    </label>
+  </div>
+
+  <div class="form-actions">
+    <span class="repo-hint">Token 会在后端加密存储，不会返回给前端。</span>
+    <button
+      class="action"
+      type="submit"
+      disabled={savingConfig || !repoForm.owner || !repoForm.repo || !repoForm.branch}
+    >
+      {savingConfig ? '保存中...' : '保存仓库配置'}
+    </button>
+  </div>
+</form>
 
 <section class="admin-grid">
   <form class="panel panel-pad create-card" on:submit|preventDefault={submitCreateSet}>
@@ -155,7 +259,7 @@
 
     <div class="form-actions">
       <button class="action secondary" type="button" on:click={fillSuggestedId}>生成 ID</button>
-      <button class="action" type="submit" disabled={saving || !newSet.id || !newSet.name}>
+      <button class="action" type="submit" disabled={saving || !repoConfigured || !newSet.id || !newSet.name}>
         {saving ? '创建中...' : '创建集合'}
       </button>
     </div>
@@ -174,6 +278,8 @@
       <div class="notice">正在读取 sets.json...</div>
     {:else if listError}
       <div class="notice error">{listError}</div>
+    {:else if !repoConfigured}
+      <div class="notice">请先保存 GitHub 仓库配置。</div>
     {:else if sets.length === 0}
       <div class="notice">还没有集合，请先创建一个。</div>
     {:else}
@@ -258,6 +364,27 @@
     align-items: start;
   }
 
+  .repo-card {
+    display: grid;
+    gap: 14px;
+  }
+
+  .repo-form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    gap: 12px;
+  }
+
+  .token-field {
+    grid-column: 1 / -1;
+  }
+
+  .repo-hint {
+    color: rgba(246, 239, 217, 0.58);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
   .create-card,
   .list-card {
     display: grid;
@@ -312,6 +439,7 @@
 
   @media (max-width: 960px) {
     .admin-grid,
+    .repo-form-grid,
     .set-row {
       grid-template-columns: 1fr;
     }

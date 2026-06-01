@@ -1,14 +1,36 @@
 services:
+  icon-set-db:
+    image: postgres:16-alpine
+    container_name: icon-set-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: icon_set
+      POSTGRES_USER: icon_set
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-icon_set_password}
+    volumes:
+      - icon-set-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U icon_set -d icon_set"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - icon-set
+
   icon-set-api:
     build:
       context: .
       dockerfile: Dockerfile.api
     container_name: icon-set-api
     restart: unless-stopped
+    depends_on:
+      icon-set-db:
+        condition: service_healthy
     env_file:
       - ./deploy/api.env
     environment:
       API_BIND_ADDR: 0.0.0.0:3000
+      DATABASE_URL: postgres://icon_set:${POSTGRES_PASSWORD:-icon_set_password}@icon-set-db:5432/icon_set
     networks:
       - icon-set
 
@@ -31,3 +53,6 @@ services:
 networks:
   icon-set:
     name: icon-set
+
+volumes:
+  icon-set-db-data:

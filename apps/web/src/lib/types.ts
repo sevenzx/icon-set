@@ -25,6 +25,31 @@ export type IconManifest = {
 export type SessionResponse = {
   authenticated: boolean;
   admin_token?: string;
+  user?: UserProfile;
+  repo_config?: RepoConfig;
+};
+
+export type UserProfile = {
+  id: string;
+  login: string;
+  name?: string;
+  email?: string;
+  avatar_url?: string;
+};
+
+export type RepoConfig = {
+  configured: boolean;
+  owner: string;
+  repo: string;
+  branch: string;
+  token_configured: boolean;
+};
+
+export type RepoConfigPayload = {
+  owner: string;
+  repo: string;
+  branch: string;
+  token: string;
 };
 
 export type CreateSetPayload = {

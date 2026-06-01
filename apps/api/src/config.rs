@@ -5,12 +5,15 @@ use thiserror::Error;
 #[derive(Clone)]
 pub struct Config {
     pub bind_addr: SocketAddr,
-    pub admin_password: String,
+    pub app_base_url: String,
+    pub database_url: String,
+    pub encryption_key: String,
+    pub github_oauth_client_id: String,
+    pub github_oauth_client_secret: String,
     pub github_token: Option<String>,
     pub github_owner: String,
     pub github_repo: String,
     pub github_branch: String,
-    pub raw_base_url: String,
     pub cors_origin: String,
     pub cookie_secure: bool,
     pub session_cookie_name: String,
@@ -41,44 +44,36 @@ impl Config {
                 name: "API_BIND_ADDR",
                 reason: err.to_string(),
             })?;
-        let admin_password = required_env("ADMIN_PASSWORD")?;
+        let app_base_url = env_or_default("APP_BASE_URL", "http://localhost:5173");
+        let database_url = required_env("DATABASE_URL")?;
+        let encryption_key = required_env("ENCRYPTION_KEY")?;
+        let github_oauth_client_id = required_env("GITHUB_OAUTH_CLIENT_ID")?;
+        let github_oauth_client_secret = required_env("GITHUB_OAUTH_CLIENT_SECRET")?;
         let github_owner = required_env("GITHUB_OWNER")?;
         let github_repo = required_env("GITHUB_REPO")?;
         let github_branch = env_or_default("GITHUB_BRANCH", "main");
-        let raw_base_url = env::var("RAW_BASE_URL").unwrap_or_else(|_| {
-            format!(
-                "https://raw.githubusercontent.com/{}/{}/{}",
-                github_owner, github_repo, github_branch
-            )
-        });
         let cors_origin = env_or_default("CORS_ORIGIN", "http://localhost:5173");
         let cookie_secure = parse_bool_env("COOKIE_SECURE", false)?;
         let max_upload_bytes = parse_usize_env("MAX_UPLOAD_BYTES", 5 * 1024 * 1024)?;
 
         Ok(Self {
             bind_addr,
-            admin_password,
+            app_base_url,
+            database_url,
+            encryption_key,
+            github_oauth_client_id,
+            github_oauth_client_secret,
             github_token: env::var("GITHUB_TOKEN")
                 .ok()
                 .filter(|value| !value.is_empty()),
             github_owner,
             github_repo,
             github_branch,
-            raw_base_url,
             cors_origin,
             cookie_secure,
             session_cookie_name: "icon_set_session".to_string(),
             max_upload_bytes,
         })
-    }
-
-    /// 拼出某个仓库文件对应的 raw.githubusercontent.com 地址。
-    pub fn raw_url(&self, path: &str) -> String {
-        format!(
-            "{}/{}",
-            self.raw_base_url.trim_end_matches('/'),
-            path.trim_start_matches('/')
-        )
     }
 }
 

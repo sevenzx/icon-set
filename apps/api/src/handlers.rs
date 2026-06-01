@@ -5,27 +5,37 @@ use std::{
 
 use axum::{
     Json,
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Query, State},
     http::HeaderMap,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
 };
-use chrono::Utc;
+use chrono::{Duration, Utc};
+use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
     AppState, auth,
+    db::RepoConfig,
     error::{AppError, AppResult},
+    github::GitHubClient,
     limits,
     models::{
-        CreateSetRequest, IconEntry, IconManifest, IconSetSummary, LoginRequest, RenameIconRequest,
-        SessionResponse, UpdateSetRequest,
+        CreateSetRequest, IconEntry, IconManifest, IconSetSummary, RenameIconRequest,
+        RepoConfigRequest, RepoConfigResponse, SessionResponse, UpdateSetRequest,
     },
 };
 use zip::ZipArchive;
 
 const SETS_INDEX_PATH: &str = "sets.json";
 const ICON_NAME_MAX_LEN: usize = 120;
+const OAUTH_STATE_TTL: Duration = Duration::minutes(10);
+
+#[derive(Debug, Deserialize)]
+pub struct GithubCallbackQuery {
+    code: String,
+    state: String,
+}
 
 /// 返回健康检查状态。
 pub async fn health() -> Json<serde_json::Value> {
@@ -34,7 +44,7 @@ pub async fn health() -> Json<serde_json::Value> {
 
 /// 列出公开图标集合。
 pub async fn list_sets(State(state): State<AppState>) -> AppResult<Json<Vec<IconSetSummary>>> {
-    let (sets, _) = load_sets(&state).await?;
+    let (sets, _) = load_sets(&state.github).await?;
     Ok(Json(sets))
 }
 
@@ -44,26 +54,40 @@ pub async fn get_set(
     Path(set_id): Path<String>,
 ) -> AppResult<Json<IconManifest>> {
     validate_set_id(&set_id)?;
-    let (manifest, _) = load_manifest(&state, &set_id).await?;
+    let (manifest, _) = load_manifest(&state.github, &set_id).await?;
     Ok(Json(manifest))
 }
 
-/// 使用简单密码登录管理员后台。
-pub async fn login(
+/// 跳转到 GitHub OAuth 授权页。
+pub async fn github_oauth_start(State(state): State<AppState>) -> AppResult<Redirect> {
+    let oauth_state = Uuid::new_v4().to_string();
+    state
+        .db
+        .create_oauth_state(&oauth_state, OAUTH_STATE_TTL)
+        .await?;
+    Ok(Redirect::temporary(
+        &state.oauth.authorize_url(&oauth_state),
+    ))
+}
+
+/// 处理 GitHub OAuth 回调并建立登录会话。
+pub async fn github_oauth_callback(
     State(state): State<AppState>,
-    Json(payload): Json<LoginRequest>,
+    Query(query): Query<GithubCallbackQuery>,
 ) -> AppResult<Response> {
-    if !auth::password_matches(&payload.password, &state.config.admin_password) {
+    if !state.db.consume_oauth_state(&query.state).await? {
         return Err(AppError::Unauthorized);
     }
 
-    let session = auth::create_session(&state).await;
+    let access_token = state.oauth.exchange_code(&query.code).await?;
+    let github_user = state.oauth.fetch_user(&access_token).await?;
+    let user_id = state
+        .db
+        .upsert_github_user(github_user, &state.secrets)
+        .await?;
+    let session = auth::create_session(&state, user_id).await?;
     let cookie = auth::session_cookie_value(&state, &session.cookie_token);
-    let mut response = Json(SessionResponse {
-        authenticated: true,
-        admin_token: Some(session.admin_token),
-    })
-    .into_response();
+    let mut response = Redirect::temporary("/admin").into_response();
     auth::set_cookie_header(response.headers_mut(), cookie)?;
 
     Ok(response)
@@ -71,11 +95,13 @@ pub async fn login(
 
 /// 清理当前管理员会话。
 pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Response> {
-    auth::destroy_session(&state, &headers).await;
+    auth::destroy_session(&state, &headers).await?;
     let cookie = auth::expired_session_cookie_value(&state);
     let mut response = Json(SessionResponse {
         authenticated: false,
         admin_token: None,
+        user: None,
+        repo_config: None,
     })
     .into_response();
     auth::set_cookie_header(response.headers_mut(), cookie)?;
@@ -84,23 +110,141 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> AppRes
 }
 
 /// 查询当前请求是否已经登录。
-pub async fn session(State(state): State<AppState>, headers: HeaderMap) -> Json<SessionResponse> {
-    Json(SessionResponse {
-        authenticated: auth::is_authenticated(&state, &headers).await,
-        admin_token: None,
-    })
+pub async fn session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<Json<SessionResponse>> {
+    let Some(session) = auth::current_session(&state, &headers).await? else {
+        return Ok(Json(SessionResponse {
+            authenticated: false,
+            admin_token: None,
+            user: None,
+            repo_config: None,
+        }));
+    };
+    let user = state
+        .db
+        .user_profile(session.user_id, &state.secrets)
+        .await?;
+    let repo_config = state
+        .db
+        .repo_config_response(session.user_id, &state.secrets)
+        .await?;
+
+    Ok(Json(SessionResponse {
+        authenticated: true,
+        admin_token: Some(session.admin_token),
+        user: Some(user),
+        repo_config,
+    }))
+}
+
+/// 读取当前用户的 GitHub 仓库配置。
+pub async fn get_repo_config(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<Json<RepoConfigResponse>> {
+    let session = require_session(&state, &headers).await?;
+    let config = state
+        .db
+        .repo_config_response(session.user_id, &state.secrets)
+        .await?
+        .unwrap_or(RepoConfigResponse {
+            configured: false,
+            owner: String::new(),
+            repo: String::new(),
+            branch: "main".to_string(),
+            token_configured: false,
+        });
+
+    Ok(Json(config))
+}
+
+/// 保存当前用户的 GitHub 仓库配置，token 会加密后写入数据库。
+pub async fn save_repo_config(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<RepoConfigRequest>,
+) -> AppResult<Json<RepoConfigResponse>> {
+    let session = require_session(&state, &headers).await?;
+    let owner = validate_required_text(&payload.owner, "GitHub Owner", 120)?;
+    let repo = validate_required_text(&payload.repo, "GitHub Repo", 120)?;
+    let branch = validate_required_text(&payload.branch, "GitHub Branch", 120)?;
+    let token = if payload.token.trim().is_empty() {
+        state
+            .db
+            .repo_config(session.user_id, &state.secrets)
+            .await
+            .map(|config| config.token)
+            .map_err(|_| AppError::BadRequest("首次配置必须填写 GitHub Token".to_string()))?
+    } else {
+        payload.token.trim().to_string()
+    };
+    let github = GitHubClient::from_repo_config(RepoConfig {
+        owner: owner.clone(),
+        repo: repo.clone(),
+        branch: branch.clone(),
+        token: token.clone(),
+    });
+
+    // 保存前轻量校验仓库、分支和 token 是否可访问；sets.json 不存在也允许继续。
+    let _ = github.get_file(SETS_INDEX_PATH).await?;
+
+    state
+        .db
+        .upsert_repo_config(
+            session.user_id,
+            &owner,
+            &repo,
+            &branch,
+            &token,
+            &state.secrets,
+        )
+        .await?;
+
+    Ok(Json(RepoConfigResponse {
+        configured: true,
+        owner,
+        repo,
+        branch,
+        token_configured: true,
+    }))
+}
+
+/// 列出当前用户仓库中的图标集合。
+pub async fn list_admin_sets(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<Json<Vec<IconSetSummary>>> {
+    let github = admin_github(&state, &headers).await?;
+    let (sets, _) = load_sets(&github).await?;
+    Ok(Json(sets))
+}
+
+/// 读取当前用户仓库中的某个图标集合。
+pub async fn get_admin_set(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(set_id): Path<String>,
+) -> AppResult<Json<IconManifest>> {
+    validate_set_id(&set_id)?;
+    let github = admin_github(&state, &headers).await?;
+    let (manifest, _) = load_manifest(&github, &set_id).await?;
+    Ok(Json(manifest))
 }
 
 /// 创建一个新的图标集合。
 pub async fn create_set(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<CreateSetRequest>,
 ) -> AppResult<Json<IconSetSummary>> {
+    let github = admin_github(&state, &headers).await?;
     let set_id = slugify(&payload.id);
     validate_set_id(&set_id)?;
     let name = validate_required_text(&payload.name, "集合名称", 120)?;
     let description = validate_optional_text(&payload.description, 800)?;
-    let (mut sets, sets_sha) = load_sets(&state).await?;
+    let (mut sets, sets_sha) = load_sets(&github).await?;
 
     if sets.iter().any(|set| set.id == set_id) {
         return Err(AppError::Conflict(set_id));
@@ -123,12 +267,12 @@ pub async fn create_set(
     };
     let manifest_path = manifest_path(&set_id);
 
-    if state.github.get_file(&manifest_path).await?.is_some() {
+    if github.get_file(&manifest_path).await?.is_some() {
         return Err(AppError::Conflict(manifest_path));
     }
 
     save_manifest(
-        &state,
+        &github,
         &manifest,
         None,
         &format!("Create icon set {set_id}"),
@@ -136,7 +280,7 @@ pub async fn create_set(
     .await?;
     sets.push(summary.clone());
     sort_sets(&mut sets);
-    save_sets(&state, &sets, sets_sha.as_deref(), "Update sets index").await?;
+    save_sets(&github, &sets, sets_sha.as_deref(), "Update sets index").await?;
 
     Ok(Json(summary))
 }
@@ -144,16 +288,18 @@ pub async fn create_set(
 /// 更新图标集合的名称和描述。
 pub async fn update_set(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(set_id): Path<String>,
     Json(payload): Json<UpdateSetRequest>,
 ) -> AppResult<Json<IconSetSummary>> {
+    let github = admin_github(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
-    let (mut sets, sets_sha) = load_sets(&state).await?;
+    let (mut sets, sets_sha) = load_sets(&github).await?;
     let Some(summary) = sets.iter_mut().find(|set| set.id == set_id) else {
         return Err(AppError::NotFound);
     };
-    let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
+    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
 
     if let Some(name) = payload.name {
         let name = validate_required_text(&name, "集合名称", 120)?;
@@ -173,14 +319,14 @@ pub async fn update_set(
     let updated_summary = summary.clone();
 
     save_manifest(
-        &state,
+        &github,
         &manifest,
         Some(&manifest_sha),
         &format!("Update icon set {set_id}"),
     )
     .await?;
     sort_sets(&mut sets);
-    save_sets(&state, &sets, sets_sha.as_deref(), "Update sets index").await?;
+    save_sets(&github, &sets, sets_sha.as_deref(), "Update sets index").await?;
 
     Ok(Json(updated_summary))
 }
@@ -188,24 +334,29 @@ pub async fn update_set(
 /// 删除一个图标集合及其 manifest 中登记的图片。
 pub async fn delete_set(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(set_id): Path<String>,
 ) -> AppResult<Json<Vec<IconSetSummary>>> {
+    let github = admin_github(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
-    let (mut sets, sets_sha) = load_sets(&state).await?;
+    let (mut sets, sets_sha) = load_sets(&github).await?;
     let original_len = sets.len();
     sets.retain(|set| set.id != set_id);
     if sets.len() == original_len {
         return Err(AppError::NotFound);
     }
 
-    if let Ok((manifest, manifest_sha)) = load_manifest(&state, &set_id).await {
+    if let Ok((manifest, manifest_sha)) = load_manifest(&github, &set_id).await {
         for icon in manifest.icons.iter().filter(|icon| !icon.path.is_empty()) {
-            delete_github_file_if_exists(&state, &icon.path, &format!("Delete icon {}", icon.name))
-                .await?;
+            delete_github_file_if_exists(
+                &github,
+                &icon.path,
+                &format!("Delete icon {}", icon.name),
+            )
+            .await?;
         }
-        state
-            .github
+        github
             .delete_file(
                 &manifest_path(&set_id),
                 &manifest_sha,
@@ -214,16 +365,18 @@ pub async fn delete_set(
             .await?;
     }
 
-    save_sets(&state, &sets, sets_sha.as_deref(), "Update sets index").await?;
+    save_sets(&github, &sets, sets_sha.as_deref(), "Update sets index").await?;
     Ok(Json(sets))
 }
 
 /// 上传图片并写入对应集合的 manifest。
 pub async fn upload_icon(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(set_id): Path<String>,
     mut multipart: Multipart,
 ) -> AppResult<Json<IconManifest>> {
+    let github = admin_github(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let mut icon_name: Option<String> = None;
@@ -265,15 +418,14 @@ pub async fn upload_icon(
     };
     let icon_id = Uuid::new_v4().to_string();
     let md5 = file_md5(&upload.bytes);
-    let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
-    hydrate_missing_icon_md5(&state, &mut manifest).await?;
+    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
+    hydrate_missing_icon_md5(&github, &mut manifest).await?;
     ensure_unique_icon_md5(&manifest, &md5)?;
     let (name, path) =
-        unique_icon_name_and_path(&state, &manifest, &set_id, &name, &extension, None, None)
+        unique_icon_name_and_path(&github, &manifest, &set_id, &name, &extension, None, None)
             .await?;
 
-    state
-        .github
+    github
         .put_file(&path, &upload.bytes, &format!("Add icon {name}"), None)
         .await?;
 
@@ -281,18 +433,18 @@ pub async fn upload_icon(
         id: icon_id,
         name,
         path: path.clone(),
-        url: state.github.raw_url(&path),
+        url: github.raw_url(&path),
         md5,
     });
-    normalize_manifest(&state, &set_id, &mut manifest);
+    normalize_manifest(&github, &set_id, &mut manifest);
     save_manifest(
-        &state,
+        &github,
         &manifest,
         Some(&manifest_sha),
         &format!("Update icon set {set_id}"),
     )
     .await?;
-    sync_set_summary(&state, &manifest).await?;
+    sync_set_summary(&github, &manifest).await?;
 
     Ok(Json(manifest))
 }
@@ -300,9 +452,11 @@ pub async fn upload_icon(
 /// 批量上传图片或 zip 压缩包并写入对应集合的 manifest。
 pub async fn upload_icons_batch(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(set_id): Path<String>,
     mut multipart: Multipart,
 ) -> AppResult<Json<IconManifest>> {
+    let github = admin_github(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
     let mut uploads: Vec<BatchUploadFile> = Vec::new();
@@ -344,8 +498,8 @@ pub async fn upload_icons_batch(
         ));
     }
 
-    let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
-    hydrate_missing_icon_md5(&state, &mut manifest).await?;
+    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
+    hydrate_missing_icon_md5(&github, &mut manifest).await?;
     ensure_unique_batch_md5s(&manifest, &uploads)?;
     let mut new_icons = Vec::with_capacity(uploads.len());
 
@@ -353,7 +507,7 @@ pub async fn upload_icons_batch(
         let extension = detect_extension(&upload.file_name, None)?;
         let requested_name = filename_stem(&upload.file_name);
         let (name, path) = unique_icon_name_and_path(
-            &state,
+            &github,
             &manifest,
             &set_id,
             &requested_name,
@@ -363,8 +517,7 @@ pub async fn upload_icons_batch(
         )
         .await?;
 
-        state
-            .github
+        github
             .put_file(&path, &upload.bytes, &format!("Add icon {name}"), None)
             .await?;
 
@@ -372,7 +525,7 @@ pub async fn upload_icons_batch(
             id: Uuid::new_v4().to_string(),
             name,
             path: path.clone(),
-            url: state.github.raw_url(&path),
+            url: github.raw_url(&path),
             md5: upload.md5,
         };
         manifest.icons.push(icon.clone());
@@ -380,15 +533,15 @@ pub async fn upload_icons_batch(
     }
 
     manifest.updated_at = now_iso();
-    normalize_manifest(&state, &set_id, &mut manifest);
+    normalize_manifest(&github, &set_id, &mut manifest);
     save_manifest(
-        &state,
+        &github,
         &manifest,
         Some(&manifest_sha),
         &format!("Batch add {} icons to {set_id}", new_icons.len()),
     )
     .await?;
-    sync_set_summary(&state, &manifest).await?;
+    sync_set_summary(&github, &manifest).await?;
 
     Ok(Json(manifest))
 }
@@ -396,12 +549,14 @@ pub async fn upload_icons_batch(
 /// 修改指定图标的名称。
 pub async fn rename_icon(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path((set_id, icon_id)): Path<(String, String)>,
     Json(payload): Json<RenameIconRequest>,
 ) -> AppResult<Json<IconManifest>> {
+    let github = admin_github(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
-    let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
+    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
     let Some(icon_position) = manifest.icons.iter().position(|icon| icon.id == icon_id) else {
         return Err(AppError::NotFound);
     };
@@ -409,7 +564,7 @@ pub async fn rename_icon(
     let requested_name = validate_icon_name(&payload.name)?;
     let extension = icon_extension(&current_icon.path)?;
     let (name, path) = unique_icon_name_and_path(
-        &state,
+        &github,
         &manifest,
         &set_id,
         &requested_name,
@@ -418,19 +573,18 @@ pub async fn rename_icon(
         Some(&current_icon.path),
     )
     .await?;
-    let url = state.github.raw_url(&path);
+    let url = github.raw_url(&path);
     let path_changed = current_icon.path != path;
     let mut md5 = current_icon.md5.clone();
 
     if path_changed {
-        let Some(file) = state.github.get_file(&current_icon.path).await? else {
+        let Some(file) = github.get_file(&current_icon.path).await? else {
             return Err(AppError::NotFound);
         };
         if md5.is_empty() {
             md5 = file_md5(&file.content);
         }
-        state
-            .github
+        github
             .put_file(
                 &path,
                 &file.content,
@@ -449,16 +603,16 @@ pub async fn rename_icon(
     sort_icons(&mut manifest.icons);
 
     save_manifest(
-        &state,
+        &github,
         &manifest,
         Some(&manifest_sha),
         &format!("Rename icon {icon_id}"),
     )
     .await?;
-    sync_set_summary(&state, &manifest).await?;
+    sync_set_summary(&github, &manifest).await?;
     if path_changed {
         delete_github_file_if_exists(
-            &state,
+            &github,
             &current_icon.path,
             &format!("Delete old icon file {}", current_icon.name),
         )
@@ -471,30 +625,32 @@ pub async fn rename_icon(
 /// 删除指定图标及其 GitHub 图片文件。
 pub async fn delete_icon(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path((set_id, icon_id)): Path<(String, String)>,
 ) -> AppResult<Json<IconManifest>> {
+    let github = admin_github(&state, &headers).await?;
     validate_set_id(&set_id)?;
 
-    let (mut manifest, manifest_sha) = load_manifest(&state, &set_id).await?;
+    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
     let Some(position) = manifest.icons.iter().position(|icon| icon.id == icon_id) else {
         return Err(AppError::NotFound);
     };
     let icon = manifest.icons.remove(position);
 
     if !icon.path.is_empty() {
-        delete_github_file_if_exists(&state, &icon.path, &format!("Delete icon {}", icon.name))
+        delete_github_file_if_exists(&github, &icon.path, &format!("Delete icon {}", icon.name))
             .await?;
     }
 
     manifest.updated_at = now_iso();
     save_manifest(
-        &state,
+        &github,
         &manifest,
         Some(&manifest_sha),
         &format!("Update icon set {set_id}"),
     )
     .await?;
-    sync_set_summary(&state, &manifest).await?;
+    sync_set_summary(&github, &manifest).await?;
 
     Ok(Json(manifest))
 }
@@ -522,10 +678,27 @@ impl BatchUploadFile {
     }
 }
 
+async fn require_session(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> AppResult<crate::db::AuthSession> {
+    auth::current_session(state, headers)
+        .await?
+        .ok_or(AppError::Unauthorized)
+}
+
+async fn admin_github(state: &AppState, headers: &HeaderMap) -> AppResult<GitHubClient> {
+    let session = require_session(state, headers).await?;
+    let repo_config = state
+        .db
+        .repo_config(session.user_id, &state.secrets)
+        .await?;
+    Ok(GitHubClient::from_repo_config(repo_config))
+}
+
 /// 读取 sets.json，缺失时返回空列表。
-async fn load_sets(state: &AppState) -> AppResult<(Vec<IconSetSummary>, Option<String>)> {
-    let Some(file) = state
-        .github
+async fn load_sets(github: &GitHubClient) -> AppResult<(Vec<IconSetSummary>, Option<String>)> {
+    let Some(file) = github
         .get_json::<Vec<IconSetSummary>>(SETS_INDEX_PATH)
         .await?
     else {
@@ -539,33 +712,32 @@ async fn load_sets(state: &AppState) -> AppResult<(Vec<IconSetSummary>, Option<S
 
 /// 将 sets.json 保存回 GitHub。
 async fn save_sets(
-    state: &AppState,
+    github: &GitHubClient,
     sets: &[IconSetSummary],
     sha: Option<&str>,
     message: &str,
 ) -> AppResult<()> {
     let content = serde_json::to_vec_pretty(sets)?;
-    state
-        .github
+    github
         .put_file(SETS_INDEX_PATH, &content, message, sha)
         .await
 }
 
 /// 读取并规范化某个集合的 manifest。
-async fn load_manifest(state: &AppState, set_id: &str) -> AppResult<(IconManifest, String)> {
+async fn load_manifest(github: &GitHubClient, set_id: &str) -> AppResult<(IconManifest, String)> {
     let path = manifest_path(set_id);
-    let Some(file) = state.github.get_json::<IconManifest>(&path).await? else {
+    let Some(file) = github.get_json::<IconManifest>(&path).await? else {
         return Err(AppError::NotFound);
     };
     let mut manifest = file.value;
-    normalize_manifest(state, set_id, &mut manifest);
+    normalize_manifest(github, set_id, &mut manifest);
 
     Ok((manifest, file.sha))
 }
 
 /// 将 manifest 保存回 GitHub。
 async fn save_manifest(
-    state: &AppState,
+    github: &GitHubClient,
     manifest: &IconManifest,
     sha: Option<&str>,
     message: &str,
@@ -573,15 +745,14 @@ async fn save_manifest(
     let mut manifest = manifest.clone();
     sort_icons(&mut manifest.icons);
     let content = serde_json::to_vec_pretty(&manifest)?;
-    state
-        .github
+    github
         .put_file(&manifest_path(&manifest.id), &content, message, sha)
         .await
 }
 
 /// 根据 manifest 同步 sets.json 中的摘要信息。
-async fn sync_set_summary(state: &AppState, manifest: &IconManifest) -> AppResult<()> {
-    let (mut sets, sets_sha) = load_sets(state).await?;
+async fn sync_set_summary(github: &GitHubClient, manifest: &IconManifest) -> AppResult<()> {
+    let (mut sets, sets_sha) = load_sets(github).await?;
     let Some(summary) = sets.iter_mut().find(|set| set.id == manifest.id) else {
         return Ok(());
     };
@@ -591,19 +762,19 @@ async fn sync_set_summary(state: &AppState, manifest: &IconManifest) -> AppResul
     summary.icon_count = manifest.icons.len();
     summary.updated_at = manifest.updated_at.clone();
     sort_sets(&mut sets);
-    save_sets(state, &sets, sets_sha.as_deref(), "Update sets index").await
+    save_sets(github, &sets, sets_sha.as_deref(), "Update sets index").await
 }
 
 /// 删除 GitHub 文件，文件不存在时视为已经删除。
 async fn delete_github_file_if_exists(
-    state: &AppState,
+    github: &GitHubClient,
     path: &str,
     message: &str,
 ) -> AppResult<()> {
-    let Some(file) = state.github.get_file(path).await? else {
+    let Some(file) = github.get_file(path).await? else {
         return Ok(());
     };
-    state.github.delete_file(path, &file.sha, message).await
+    github.delete_file(path, &file.sha, message).await
 }
 
 /// 计算图片内容 MD5，用于上传去重校验。
@@ -612,13 +783,16 @@ fn file_md5(bytes: &[u8]) -> String {
 }
 
 /// 为历史 manifest 中缺失 MD5 的图标补齐内容哈希。
-async fn hydrate_missing_icon_md5(state: &AppState, manifest: &mut IconManifest) -> AppResult<()> {
+async fn hydrate_missing_icon_md5(
+    github: &GitHubClient,
+    manifest: &mut IconManifest,
+) -> AppResult<()> {
     for icon in &mut manifest.icons {
         if !icon.md5.is_empty() || icon.path.is_empty() {
             continue;
         }
 
-        if let Some(file) = state.github.get_file(&icon.path).await? {
+        if let Some(file) = github.get_file(&icon.path).await? {
             icon.md5 = file_md5(&file.content);
         }
     }
@@ -665,7 +839,7 @@ fn ensure_unique_batch_md5s(manifest: &IconManifest, uploads: &[BatchUploadFile]
 }
 
 /// 规范化 manifest 中的派生字段和排序。
-fn normalize_manifest(state: &AppState, set_id: &str, manifest: &mut IconManifest) {
+fn normalize_manifest(github: &GitHubClient, set_id: &str, manifest: &mut IconManifest) {
     manifest.id = set_id.to_string();
     manifest.updated_at = if manifest.updated_at.is_empty() {
         now_iso()
@@ -675,7 +849,7 @@ fn normalize_manifest(state: &AppState, set_id: &str, manifest: &mut IconManifes
 
     for icon in &mut manifest.icons {
         if !icon.path.is_empty() {
-            icon.url = state.github.raw_url(&icon.path);
+            icon.url = github.raw_url(&icon.path);
         }
     }
     sort_icons(&mut manifest.icons);
@@ -1067,7 +1241,7 @@ mod tests {
 
 /// 生成集合内唯一的图标名称和图片路径。
 async fn unique_icon_name_and_path(
-    state: &AppState,
+    github: &GitHubClient,
     manifest: &IconManifest,
     set_id: &str,
     requested_name: &str,
@@ -1087,7 +1261,7 @@ async fn unique_icon_name_and_path(
         let path_exists = if Some(candidate_path.as_str()) == current_path {
             false
         } else {
-            state.github.get_file(&candidate_path).await?.is_some()
+            github.get_file(&candidate_path).await?.is_some()
         };
 
         if !name_exists && !path_exists {

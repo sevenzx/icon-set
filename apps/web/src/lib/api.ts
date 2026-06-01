@@ -2,9 +2,12 @@ import type {
   CreateSetPayload,
   IconManifest,
   IconSetSummary,
+  RepoConfig,
+  RepoConfigPayload,
   SessionResponse,
   UpdateSetPayload
 } from './types';
+import { authenticated } from './auth-state';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const ADMIN_TOKEN_STORAGE_KEY = 'icon-set-admin-token';
@@ -73,6 +76,11 @@ async function adminRequest<T>(path: string, init: RequestInit = {}): Promise<T>
   }
 }
 
+/// 拼出同源或独立 API 的登录跳转地址。
+export function authUrl(path: string) {
+  return apiUrl(path);
+}
+
 /// 把当前会话写 token 限制在当前浏览器标签页内，关闭标签页后自动失效。
 function rememberAdminToken(adminToken: string) {
   adminTokenMemory = adminToken;
@@ -128,26 +136,13 @@ export function getSet(setId: string) {
   return request<IconManifest>(`/api/sets/${encodeURIComponent(setId)}`);
 }
 
-/// 使用管理员密码登录。
-export async function login(password: string) {
-  const session = await request<SessionResponse>('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ password })
-  });
-
-  if (session.authenticated && session.admin_token) {
-    rememberAdminToken(session.admin_token);
-  }
-
-  return session;
-}
-
 /// 退出当前管理员会话。
 export async function logout() {
   try {
     return await request<SessionResponse>('/api/auth/logout', { method: 'POST' });
   } finally {
     forgetAdminToken();
+    authenticated.set(false);
   }
 }
 
@@ -155,9 +150,40 @@ export async function logout() {
 export async function getSession() {
   const session = await request<SessionResponse>('/api/auth/session');
 
-  return {
+  if (session.authenticated && session.admin_token) {
+    rememberAdminToken(session.admin_token);
+  }
+
+  const normalizedSession = {
+    ...session,
     authenticated: session.authenticated && Boolean(readAdminToken())
   };
+  authenticated.set(normalizedSession.authenticated);
+
+  return normalizedSession;
+}
+
+/// 读取当前用户的 GitHub 仓库配置。
+export function getRepoConfig() {
+  return adminRequest<RepoConfig>('/api/admin/config');
+}
+
+/// 保存当前用户的 GitHub 仓库配置，token 只会发送给后端加密存储。
+export function saveRepoConfig(payload: RepoConfigPayload) {
+  return adminRequest<RepoConfig>('/api/admin/config', {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+/// 读取当前用户的图标集合。
+export function listAdminSets() {
+  return adminRequest<IconSetSummary[]>('/api/admin/sets');
+}
+
+/// 读取当前用户指定图标集合的 manifest。
+export function getAdminSet(setId: string) {
+  return adminRequest<IconManifest>(`/api/admin/sets/${encodeURIComponent(setId)}`);
 }
 
 /// 创建新的图标集合。
