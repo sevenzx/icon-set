@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import DeleteConfirmModal from '$lib/DeleteConfirmModal.svelte';
   import {
@@ -54,7 +54,7 @@
   async function refreshManifest() {
     loading = true;
     error = '';
-    const setId = $page.params.setId;
+    const setId = page.params.setId;
 
     if (!setId) {
       error = '缺少集合 ID';
