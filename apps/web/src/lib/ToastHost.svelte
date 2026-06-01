@@ -10,7 +10,11 @@
           <span>{item.variant === 'error' ? 'Error' : 'Info'}</span>
           <p>{item.message}</p>
         </div>
-        <button type="button" aria-label="关闭提示" on:click={() => removeToast(item.id)}>×</button>
+        <button
+          type="button"
+          aria-label="关闭提示"
+          on:click={() => removeToast(item.id)}>×</button
+        >
       </article>
     {/each}
   </section>
@@ -41,7 +45,9 @@
     background:
       linear-gradient(135deg, rgba(198, 255, 72, 0.14), transparent 42%),
       rgba(12, 13, 11, 0.92);
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.38), 4px 4px 0 rgba(255, 85, 36, 0.95);
+    box-shadow:
+      0 18px 60px rgba(0, 0, 0, 0.38),
+      4px 4px 0 rgba(255, 85, 36, 0.95);
     backdrop-filter: blur(18px);
     pointer-events: auto;
     animation: toast-in 180ms ease-out;
@@ -52,7 +58,9 @@
     background:
       linear-gradient(135deg, rgba(255, 85, 36, 0.2), transparent 46%),
       rgba(12, 13, 11, 0.94);
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42), 4px 4px 0 rgba(198, 255, 72, 0.92);
+    box-shadow:
+      0 18px 60px rgba(0, 0, 0, 0.42),
+      4px 4px 0 rgba(198, 255, 72, 0.92);
   }
 
   .toast-copy {

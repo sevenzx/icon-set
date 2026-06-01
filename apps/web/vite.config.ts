@@ -1,8 +1,8 @@
+import { sveltekit } from '@sveltejs/kit/vite';
 import { execFileSync } from 'node:child_process';
 import { relative, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig, type Plugin } from 'vite';
 
 const rootDir = fileURLToPath(new URL('../..', import.meta.url));
@@ -29,7 +29,9 @@ function docsSyncPlugin(): Plugin {
       server.watcher.on('change', (changedPath) => {
         if (!docsToWatch.includes(changedPath)) return;
         syncDocs();
-        server.config.logger.info(`[sync-docs] updated ${relative(rootDir, changedPath)}`);
+        server.config.logger.info(
+          `[sync-docs] updated ${relative(rootDir, changedPath)}`
+        );
       });
     }
   };

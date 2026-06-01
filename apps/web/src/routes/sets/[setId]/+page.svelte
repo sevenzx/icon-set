@@ -23,7 +23,8 @@
 
   $: filteredIcons = filterIcons(manifest?.icons ?? [], query);
   $: manifestUrl = manifest ? manifestRawUrl(manifest.id) : '';
-  $: showPaginationControls = (manifest?.icons.length ?? 0) > pageSizeOptions[0];
+  $: showPaginationControls =
+    (manifest?.icons.length ?? 0) > pageSizeOptions[0];
   $: totalPages = Math.max(1, Math.ceil(filteredIcons.length / pageSize));
   $: if (query !== previousQuery || pageSize !== previousPageSize) {
     currentPage = 1;
@@ -153,7 +154,11 @@
         <strong>{manifest.icons.length}</strong>
         <span>icons</span>
       </div>
-      <button class="action secondary manifest-copy" type="button" on:click={() => copyUrl(manifestUrl)}>
+      <button
+        class="action secondary manifest-copy"
+        type="button"
+        on:click={() => copyUrl(manifestUrl)}
+      >
         {#if copiedUrl === manifestUrl}
           已复制 Manifest
         {:else if failedUrl === manifestUrl}
@@ -199,7 +204,9 @@
             {:else}
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="8" y="8" width="10" height="10" rx="2" />
-                <path d="M6 14H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1" />
+                <path
+                  d="M6 14H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"
+                />
               </svg>
             {/if}
           </button>
@@ -269,7 +276,11 @@
 {/if}
 
 {#if previewIcon}
-  <div class="image-preview-backdrop" role="presentation" on:click={handlePreviewBackdropClick}>
+  <div
+    class="image-preview-backdrop"
+    role="presentation"
+    on:click={handlePreviewBackdropClick}
+  >
     <div
       class="image-preview"
       role="dialog"
@@ -281,7 +292,12 @@
           <span class="eyebrow">Preview</span>
           <h2 id="image-preview-title">{previewIcon.name}</h2>
         </div>
-        <button class="preview-close" type="button" aria-label="关闭大图预览" on:click={closePreview}>
+        <button
+          class="preview-close"
+          type="button"
+          aria-label="关闭大图预览"
+          on:click={closePreview}
+        >
           ×
         </button>
       </header>
@@ -292,7 +308,11 @@
 
       <footer>
         <code>{previewIcon.path || previewIcon.url}</code>
-        <button class="action secondary" type="button" on:click={copyPreviewUrl}>
+        <button
+          class="action secondary"
+          type="button"
+          on:click={copyPreviewUrl}
+        >
           {copiedUrl === previewIcon.url ? '已复制' : '复制 Raw URL'}
         </button>
       </footer>
@@ -402,7 +422,9 @@
     display: grid;
     gap: 12px;
     padding: 12px;
-    transition: border-color 160ms ease, background 160ms ease;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease;
   }
 
   .icon-card:hover {
@@ -424,7 +446,10 @@
     color: rgba(246, 239, 217, 0.72);
     background: rgba(12, 13, 11, 0.78);
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
-    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      color 160ms ease;
   }
 
   .copy-url:hover,
@@ -465,7 +490,9 @@
       linear-gradient(45deg, rgba(246, 239, 217, 0.06) 25%, transparent 25%),
       linear-gradient(-45deg, rgba(246, 239, 217, 0.06) 25%, transparent 25%),
       rgba(246, 239, 217, 0.04);
-    background-position: 0 0, 0 8px;
+    background-position:
+      0 0,
+      0 8px;
     background-size: 16px 16px;
   }
 
@@ -593,7 +620,9 @@
       linear-gradient(45deg, rgba(246, 239, 217, 0.055) 25%, transparent 25%),
       linear-gradient(-45deg, rgba(246, 239, 217, 0.055) 25%, transparent 25%),
       rgba(246, 239, 217, 0.035);
-    background-position: 0 0, 0 10px;
+    background-position:
+      0 0,
+      0 10px;
     background-size: 20px 20px;
   }
 
@@ -665,7 +694,10 @@
     border-radius: 10px;
     color: rgba(246, 239, 217, 0.76);
     background: rgba(246, 239, 217, 0.06);
-    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      color 160ms ease;
   }
 
   .page-button:hover:not(:disabled),

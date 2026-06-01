@@ -1,3 +1,4 @@
+import { authenticated } from './auth-state';
 import type {
   CreateSetPayload,
   IconManifest,
@@ -7,7 +8,6 @@ import type {
   SessionResponse,
   UpdateSetPayload
 } from './types';
-import { authenticated } from './auth-state';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const ADMIN_TOKEN_STORAGE_KEY = 'icon-set-admin-token';
@@ -58,7 +58,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 /// 发送控制台请求，除 session cookie 外额外携带当前会话的写 token。
-async function consoleRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function consoleRequest<T>(
+  path: string,
+  init: RequestInit = {}
+): Promise<T> {
   const headers = new Headers(init.headers);
   const adminToken = readAdminToken();
 
@@ -108,7 +111,8 @@ function readAdminToken() {
   }
 
   try {
-    adminTokenMemory = window.sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) ?? '';
+    adminTokenMemory =
+      window.sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) ?? '';
   } catch {
     adminTokenMemory = '';
   }
@@ -139,7 +143,9 @@ export function getSet(setId: string) {
 /// 退出当前控制台会话。
 export async function logout() {
   try {
-    return await request<SessionResponse>('/api/auth/logout', { method: 'POST' });
+    return await request<SessionResponse>('/api/auth/logout', {
+      method: 'POST'
+    });
   } finally {
     forgetAdminToken();
     authenticated.set(false);
@@ -186,7 +192,9 @@ export function listAdminSets() {
 
 /// 读取当前用户指定图标集合的 manifest。
 export function getAdminSet(setId: string) {
-  return consoleRequest<IconManifest>(`/api/console/sets/${encodeURIComponent(setId)}`);
+  return consoleRequest<IconManifest>(
+    `/api/console/sets/${encodeURIComponent(setId)}`
+  );
 }
 
 /// 创建新的图标集合。
@@ -199,17 +207,23 @@ export function createSet(payload: CreateSetPayload) {
 
 /// 更新图标集合基础信息。
 export function updateSet(setId: string, payload: UpdateSetPayload) {
-  return consoleRequest<IconSetSummary>(`/api/console/sets/${encodeURIComponent(setId)}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload)
-  });
+  return consoleRequest<IconSetSummary>(
+    `/api/console/sets/${encodeURIComponent(setId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    }
+  );
 }
 
 /// 删除图标集合及其登记的图片。
 export function deleteSet(setId: string) {
-  return consoleRequest<IconSetSummary[]>(`/api/console/sets/${encodeURIComponent(setId)}`, {
-    method: 'DELETE'
-  });
+  return consoleRequest<IconSetSummary[]>(
+    `/api/console/sets/${encodeURIComponent(setId)}`,
+    {
+      method: 'DELETE'
+    }
+  );
 }
 
 /// 上传图片到指定图标集合。
@@ -218,14 +232,21 @@ export function uploadIcon(setId: string, name: string, file: File) {
   form.append('name', name);
   form.append('file', file);
 
-  return consoleRequest<IconManifest>(`/api/console/sets/${encodeURIComponent(setId)}/icons`, {
-    method: 'POST',
-    body: form
-  });
+  return consoleRequest<IconManifest>(
+    `/api/console/sets/${encodeURIComponent(setId)}/icons`,
+    {
+      method: 'POST',
+      body: form
+    }
+  );
 }
 
 /// 批量上传图片或 zip 压缩包到指定图标集合。
-export function uploadIconsBatch(setId: string, files: File[], archive: File | null) {
+export function uploadIconsBatch(
+  setId: string,
+  files: File[],
+  archive: File | null
+) {
   const form = new FormData();
 
   for (const file of files) {
@@ -235,10 +256,13 @@ export function uploadIconsBatch(setId: string, files: File[], archive: File | n
     form.append('archive', archive);
   }
 
-  return consoleRequest<IconManifest>(`/api/console/sets/${encodeURIComponent(setId)}/icons/batch`, {
-    method: 'POST',
-    body: form
-  });
+  return consoleRequest<IconManifest>(
+    `/api/console/sets/${encodeURIComponent(setId)}/icons/batch`,
+    {
+      method: 'POST',
+      body: form
+    }
+  );
 }
 
 /// 修改指定图标名称。

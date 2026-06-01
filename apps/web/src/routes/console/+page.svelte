@@ -173,11 +173,16 @@
   <div>
     <span class="eyebrow">Control Room</span>
     <h1>控制台</h1>
-    <p>登录用户拥有独立的 GitHub 仓库配置。所有写入都会提交到当前账号配置的仓库。</p>
+    <p>
+      登录用户拥有独立的 GitHub 仓库配置。所有写入都会提交到当前账号配置的仓库。
+    </p>
   </div>
 </section>
 
-<form class="panel panel-pad repo-card" on:submit|preventDefault={submitRepoConfig}>
+<form
+  class="panel panel-pad repo-card"
+  on:submit|preventDefault={submitRepoConfig}
+>
   <div class="list-head">
     <div>
       <span class="eyebrow">Repository</span>
@@ -202,11 +207,19 @@
   <div class="repo-form-grid">
     <label class="field">
       <span>Owner</span>
-      <input class="input" bind:value={repoForm.owner} placeholder={sessionUser?.login ?? 'github-user'} />
+      <input
+        class="input"
+        bind:value={repoForm.owner}
+        placeholder={sessionUser?.login ?? 'github-user'}
+      />
     </label>
     <label class="field">
       <span>Repo</span>
-      <input class="input" bind:value={repoForm.repo} placeholder="icon-set-assets" />
+      <input
+        class="input"
+        bind:value={repoForm.repo}
+        placeholder="icon-set-assets"
+      />
     </label>
     <label class="field">
       <span>Branch</span>
@@ -219,7 +232,9 @@
         bind:value={repoForm.token}
         type="password"
         autocomplete="off"
-        placeholder={repoConfig?.token_configured ? '留空则继续使用已保存 token' : 'Contents 读写 token'}
+        placeholder={repoConfig?.token_configured
+          ? '留空则继续使用已保存 token'
+          : 'Contents 读写 token'}
       />
     </label>
   </div>
@@ -229,7 +244,10 @@
     <button
       class="action"
       type="submit"
-      disabled={savingConfig || !repoForm.owner || !repoForm.repo || !repoForm.branch}
+      disabled={savingConfig ||
+        !repoForm.owner ||
+        !repoForm.repo ||
+        !repoForm.branch}
     >
       {savingConfig ? '保存中...' : '保存仓库配置'}
     </button>
@@ -237,7 +255,10 @@
 </form>
 
 <section class="admin-grid">
-  <form class="panel panel-pad create-card" on:submit|preventDefault={submitCreateSet}>
+  <form
+    class="panel panel-pad create-card"
+    on:submit|preventDefault={submitCreateSet}
+  >
     <span class="eyebrow">New Set</span>
     <h2>创建集合</h2>
 
@@ -248,17 +269,31 @@
 
     <label class="field">
       <span>集合名称</span>
-      <input class="input" bind:value={newSet.name} placeholder="你的集合名称" />
+      <input
+        class="input"
+        bind:value={newSet.name}
+        placeholder="你的集合名称"
+      />
     </label>
 
     <label class="field">
       <span>描述</span>
-      <textarea class="textarea" bind:value={newSet.description} placeholder="这个集合的用途和命名规则"></textarea>
+      <textarea
+        class="textarea"
+        bind:value={newSet.description}
+        placeholder="这个集合的用途和命名规则"
+      ></textarea>
     </label>
 
     <div class="form-actions">
-      <button class="action secondary" type="button" on:click={fillSuggestedId}>生成 ID</button>
-      <button class="action" type="submit" disabled={saving || !repoConfigured || !newSet.id || !newSet.name}>
+      <button class="action secondary" type="button" on:click={fillSuggestedId}
+        >生成 ID</button
+      >
+      <button
+        class="action"
+        type="submit"
+        disabled={saving || !repoConfigured || !newSet.id || !newSet.name}
+      >
         {saving ? '创建中...' : '创建集合'}
       </button>
     </div>
@@ -270,7 +305,9 @@
         <span class="eyebrow">Sets</span>
         <h2>已登记集合</h2>
       </div>
-      <button class="action secondary" type="button" on:click={refreshSets}>刷新</button>
+      <button class="action secondary" type="button" on:click={refreshSets}
+        >刷新</button
+      >
     </div>
 
     {#if loading}
@@ -291,8 +328,14 @@
               <p>{set.description || '暂无描述'}</p>
             </div>
             <div class="row-actions">
-              <a class="action secondary" href={`/console/sets/${set.id}`}>管理</a>
-              <button class="action danger" type="button" on:click={() => openDeleteSetModal(set)}>
+              <a class="action secondary" href={`/console/sets/${set.id}`}
+                >管理</a
+              >
+              <button
+                class="action danger"
+                type="button"
+                on:click={() => openDeleteSetModal(set)}
+              >
                 删除
               </button>
             </div>
@@ -397,7 +440,10 @@
     font-size: 12px;
     font-weight: 800;
     white-space: nowrap;
-    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      color 160ms ease;
   }
 
   .guide-link:hover {

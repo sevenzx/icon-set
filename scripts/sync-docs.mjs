@@ -20,7 +20,9 @@ export function syncDocs({ silent = false } = {}) {
     copyFileSync(source, target);
 
     if (!silent) {
-      console.log(`[sync-docs] ${relative(rootDir, source)} -> ${relative(rootDir, target)}`);
+      console.log(
+        `[sync-docs] ${relative(rootDir, source)} -> ${relative(rootDir, target)}`
+      );
     }
   }
 }

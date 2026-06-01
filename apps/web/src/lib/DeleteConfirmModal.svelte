@@ -48,7 +48,11 @@
 <svelte:window on:keydown={handleKeydown} />
 
 {#if open}
-  <div class="modal-backdrop" role="presentation" on:click={handleBackdropClick}>
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    on:click={handleBackdropClick}
+  >
     <div
       class="delete-modal"
       role="dialog"
@@ -57,7 +61,13 @@
     >
       <div class="modal-head">
         <span class="eyebrow danger-eyebrow">{eyebrow}</span>
-        <button class="close-button" type="button" aria-label="关闭" disabled={submitting} on:click={cancel}>
+        <button
+          class="close-button"
+          type="button"
+          aria-label="关闭"
+          disabled={submitting}
+          on:click={cancel}
+        >
           ×
         </button>
       </div>
@@ -80,8 +90,17 @@
 
       {#if step === 1}
         <div class="modal-actions">
-          <button class="action secondary" type="button" disabled={submitting} on:click={cancel}>取消</button>
-          <button class="action danger" type="button" on:click={() => (step = 2)}>继续删除</button>
+          <button
+            class="action secondary"
+            type="button"
+            disabled={submitting}
+            on:click={cancel}>取消</button
+          >
+          <button
+            class="action danger"
+            type="button"
+            on:click={() => (step = 2)}>继续删除</button
+          >
         </div>
       {:else}
         <label class="field confirm-field">
@@ -95,10 +114,20 @@
           />
         </label>
         <div class="modal-actions">
-          <button class="action secondary" type="button" disabled={submitting} on:click={() => (step = 1)}>
+          <button
+            class="action secondary"
+            type="button"
+            disabled={submitting}
+            on:click={() => (step = 1)}
+          >
             上一步
           </button>
-          <button class="action danger" type="button" disabled={!canSubmit} on:click={onConfirm}>
+          <button
+            class="action danger"
+            type="button"
+            disabled={!canSubmit}
+            on:click={onConfirm}
+          >
             {submitting ? '删除中...' : actionLabel}
           </button>
         </div>
@@ -130,7 +159,11 @@
     border-radius: 26px;
     color: #f6efd9;
     background:
-      linear-gradient(135deg, rgba(255, 85, 36, 0.14), rgba(12, 13, 11, 0.92) 38%),
+      linear-gradient(
+        135deg,
+        rgba(255, 85, 36, 0.14),
+        rgba(12, 13, 11, 0.92) 38%
+      ),
       #10110e;
     box-shadow: 0 32px 90px rgba(0, 0, 0, 0.62);
   }

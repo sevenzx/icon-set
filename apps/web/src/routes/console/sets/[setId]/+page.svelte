@@ -36,7 +36,8 @@
   const iconNamePattern = /^[A-Za-z0-9 ._-]+$/;
 
   $: batchTotalBytes =
-    batchFiles.reduce((total, file) => total + file.size, 0) + (archiveFile?.size ?? 0);
+    batchFiles.reduce((total, file) => total + file.size, 0) +
+    (archiveFile?.size ?? 0);
   $: batchTooLarge = batchTotalBytes > batchUploadMaxBytes;
 
   /// 校验控制台会话，未登录时跳转登录页。
@@ -67,7 +68,9 @@
         name: manifest.name,
         description: manifest.description
       };
-      renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
+      renameDrafts = Object.fromEntries(
+        manifest.icons.map((icon) => [icon.id, icon.name])
+      );
     } catch (err) {
       error = err instanceof Error ? err.message : '集合加载失败';
       if (manifest) toast.error(error);
@@ -129,7 +132,9 @@
       manifest = await uploadIcon(manifest.id, uploadName, selectedFile);
       uploadName = '';
       selectedFile = null;
-      renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
+      renameDrafts = Object.fromEntries(
+        manifest.icons.map((icon) => [icon.id, icon.name])
+      );
       toast.info('图片已上传到 GitHub');
     } catch (err) {
       error = err instanceof Error ? err.message : '上传失败';
@@ -163,7 +168,9 @@
       archiveFile = null;
       if (batchFilesInput) batchFilesInput.value = '';
       if (archiveInput) archiveInput.value = '';
-      renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
+      renameDrafts = Object.fromEntries(
+        manifest.icons.map((icon) => [icon.id, icon.name])
+      );
       toast.info('批量图片已上传到 GitHub');
     } catch (err) {
       error = err instanceof Error ? err.message : '批量上传失败';
@@ -186,7 +193,9 @@
 
     try {
       manifest = await renameIcon(manifest.id, iconId, renameDrafts[iconId]);
-      renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
+      renameDrafts = Object.fromEntries(
+        manifest.icons.map((icon) => [icon.id, icon.name])
+      );
       toast.info('图标名称已更新');
     } catch (err) {
       error = err instanceof Error ? err.message : '改名失败';
@@ -216,7 +225,9 @@
     try {
       const deletedName = deleteIconTarget.name;
       manifest = await removeIcon(manifest.id, deleteIconTarget.id);
-      renameDrafts = Object.fromEntries(manifest.icons.map((icon) => [icon.id, icon.name]));
+      renameDrafts = Object.fromEntries(
+        manifest.icons.map((icon) => [icon.id, icon.name])
+      );
       deleteIconTarget = null;
       toast.info(`图标 ${deletedName} 已删除`);
     } catch (err) {
@@ -230,7 +241,12 @@
   /// 校验图标名称只能包含英文字母、空格和 .-_。
   function isValidIconName(value: string) {
     const name = value.trim();
-    return name.length > 0 && name.length <= 120 && !value.endsWith(' ') && iconNamePattern.test(name);
+    return (
+      name.length > 0 &&
+      name.length <= 120 &&
+      !value.endsWith(' ') &&
+      iconNamePattern.test(name)
+    );
   }
 
   /// 返回图标名称校验失败时的展示文案。
@@ -290,13 +306,19 @@
       </label>
       <label class="field">
         <span>描述</span>
-        <textarea class="textarea hero-textarea" bind:value={metaForm.description}></textarea>
+        <textarea
+          class="textarea hero-textarea"
+          bind:value={metaForm.description}
+        ></textarea>
       </label>
     </form>
   </section>
 
   <section class="manage-grid">
-    <form class="panel panel-pad upload-card" on:submit|preventDefault={submitUpload}>
+    <form
+      class="panel panel-pad upload-card"
+      on:submit|preventDefault={submitUpload}
+    >
       <span class="eyebrow">Upload</span>
       <h2>上传图片</h2>
       <label class="field">
@@ -312,16 +334,27 @@
         <small>只允许英文字母、数字、空格和 .、-、_</small>
       </label>
       <label class="file-drop">
-        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" on:change={handleFileChange} />
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          on:change={handleFileChange}
+        />
         <strong>{selectedFile ? selectedFile.name : '选择图片文件'}</strong>
         <span>支持 png / jpg / webp / svg</span>
       </label>
-      <button class="action" type="submit" disabled={uploading || !selectedFile}>
+      <button
+        class="action"
+        type="submit"
+        disabled={uploading || !selectedFile}
+      >
         {uploading ? '上传中...' : '上传到 GitHub'}
       </button>
     </form>
 
-    <form class="panel panel-pad batch-card" on:submit|preventDefault={submitBatchUpload}>
+    <form
+      class="panel panel-pad batch-card"
+      on:submit|preventDefault={submitBatchUpload}
+    >
       <span class="eyebrow">Batch Upload</span>
       <h2>批量上传</h2>
       <label class="file-drop">
@@ -332,7 +365,11 @@
           bind:this={batchFilesInput}
           on:change={handleBatchFilesChange}
         />
-        <strong>{batchFiles.length > 0 ? `${batchFiles.length} 个图片文件` : '多选图片文件'}</strong>
+        <strong
+          >{batchFiles.length > 0
+            ? `${batchFiles.length} 个图片文件`
+            : '多选图片文件'}</strong
+        >
         <span>支持 png / jpg / webp / svg</span>
       </label>
       <label class="file-drop">
@@ -351,7 +388,9 @@
       <button
         class="action"
         type="submit"
-        disabled={batchUploading || batchTooLarge || (batchFiles.length === 0 && !archiveFile)}
+        disabled={batchUploading ||
+          batchTooLarge ||
+          (batchFiles.length === 0 && !archiveFile)}
       >
         {batchUploading ? '批量上传中...' : '批量上传到 GitHub'}
       </button>
@@ -364,7 +403,9 @@
         <span class="eyebrow">Icons</span>
         <h2>图片管理</h2>
       </div>
-      <button class="action secondary" type="button" on:click={refreshManifest}>刷新</button>
+      <button class="action secondary" type="button" on:click={refreshManifest}
+        >刷新</button
+      >
     </div>
 
     {#if manifest.icons.length === 0}
@@ -388,10 +429,18 @@
             </label>
             <code>{icon.path}</code>
             <div class="icon-actions">
-              <button class="action secondary" type="button" on:click={() => submitRename(icon.id)}>
+              <button
+                class="action secondary"
+                type="button"
+                on:click={() => submitRename(icon.id)}
+              >
                 保存 name
               </button>
-              <button class="action danger" type="button" on:click={() => openDeleteIconModal(icon)}>
+              <button
+                class="action danger"
+                type="button"
+                on:click={() => openDeleteIconModal(icon)}
+              >
                 删除
               </button>
             </div>

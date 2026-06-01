@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
+  import '../app.css';
   import { getSession, logout } from '$lib/api';
   import { authenticated } from '$lib/auth-state';
   import ToastHost from '$lib/ToastHost.svelte';
@@ -13,7 +14,9 @@
   let accountMenuOpen = false;
 
   $: accountName = sessionUser?.name || sessionUser?.login || '已登录用户';
-  $: accountLogin = sessionUser?.login ? `@${sessionUser.login}` : 'GitHub 账号';
+  $: accountLogin = sessionUser?.login
+    ? `@${sessionUser.login}`
+    : 'GitHub 账号';
   $: avatarFallback = (sessionUser?.login || sessionUser?.name || 'U')
     .trim()
     .slice(0, 2)
@@ -79,7 +82,11 @@
             on:click|stopPropagation={toggleAccountMenu}
           >
             {#if sessionUser?.avatar_url}
-              <img src={sessionUser.avatar_url} alt="" referrerpolicy="no-referrer" />
+              <img
+                src={sessionUser.avatar_url}
+                alt=""
+                referrerpolicy="no-referrer"
+              />
             {:else}
               <span>{avatarFallback}</span>
             {/if}
@@ -91,8 +98,12 @@
                 <strong>{accountName}</strong>
                 <span>{accountLogin}</span>
               </div>
-              <a href="/console" role="menuitem" on:click={closeAccountMenu}>进入控制台</a>
-              <button type="button" role="menuitem" on:click={submitLogout}>退出登录</button>
+              <a href="/console" role="menuitem" on:click={closeAccountMenu}
+                >进入控制台</a
+              >
+              <button type="button" role="menuitem" on:click={submitLogout}
+                >退出登录</button
+              >
             </div>
           {/if}
         </div>
@@ -125,299 +136,11 @@
 <ToastHost />
 
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
-
-  :global(*) {
-    box-sizing: border-box;
-  }
-
-  :global(html) {
-    --shell-max: 1180px;
-    --shell-pad: clamp(14px, 3vw, 30px);
-    --topbar-top: 14px;
-    --topbar-height: 44px;
-    --topbar-gap: 10px;
-    --topbar-edge: max(
-      var(--shell-pad),
-      calc((100vw - var(--shell-max)) / 2 + var(--shell-pad))
-    );
-    --topbar-logo-space: calc(var(--topbar-height) + var(--topbar-gap));
-    --topbar-actions-space: 144px;
-    color-scheme: dark;
-    background: #0c0d0b;
-  }
-
-  :global(body) {
-    margin: 0;
-    min-width: 320px;
-    min-height: 100vh;
-    color: #f6efd9;
-    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    background:
-      radial-gradient(circle at 16% 8%, rgba(255, 85, 36, 0.12), transparent 25rem),
-      radial-gradient(circle at 86% 0%, rgba(198, 255, 72, 0.1), transparent 22rem),
-      repeating-linear-gradient(90deg, rgba(246, 239, 217, 0.035) 0 1px, transparent 1px 72px),
-      repeating-linear-gradient(0deg, rgba(246, 239, 217, 0.028) 0 1px, transparent 1px 72px),
-      #0c0d0b;
-  }
-
-  :global(body::before) {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    content: '';
-    background-image: linear-gradient(rgba(246, 239, 217, 0.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(246, 239, 217, 0.06) 1px, transparent 1px);
-    background-size: 16px 16px;
-    mask-image: radial-gradient(circle at center, black, transparent 72%);
-  }
-
-  :global(a) {
-    color: inherit;
-    text-decoration: none;
-  }
-
-  :global(button),
-  :global(input),
-  :global(textarea),
-  :global(select) {
-    font: inherit;
-  }
-
-  :global(button) {
-    cursor: pointer;
-  }
-
-  :global(.page-stack) {
-    display: grid;
-    gap: 20px;
-  }
-
-  :global(.eyebrow) {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    width: fit-content;
-    padding: 8px 12px;
-    border: 1px solid rgba(246, 239, 217, 0.24);
-    border-radius: 10px;
-    color: #c6ff48;
-    background: rgba(12, 13, 11, 0.58);
-    box-shadow: 0 0 0 1px rgba(198, 255, 72, 0.06) inset;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0;
-    text-transform: uppercase;
-  }
-
-  :global(.breadcrumb) {
-    position: fixed;
-    top: var(--topbar-top);
-    right: calc(var(--topbar-edge) + var(--topbar-actions-space));
-    left: calc(var(--topbar-edge) + var(--topbar-logo-space));
-    z-index: 110;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: var(--topbar-height);
-    min-width: 0;
-    padding: 0 14px;
-    overflow: hidden;
-    border: 1px solid rgba(246, 239, 217, 0.16);
-    border-radius: 10px;
-    color: rgba(246, 239, 217, 0.62);
-    background:
-      linear-gradient(90deg, rgba(198, 255, 72, 0.07), transparent 44%),
-      rgba(12, 13, 11, 0.7);
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(18px);
-    font-size: 12px;
-    font-weight: 800;
-  }
-
-  :global(.breadcrumb a) {
-    flex: 0 0 auto;
-    color: #c6ff48;
-  }
-
-  :global(.breadcrumb span) {
-    flex: 0 0 auto;
-  }
-
-  :global(.breadcrumb strong) {
-    min-width: 0;
-    max-width: min(52vw, 520px);
-    overflow: hidden;
-    color: #f6efd9;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  :global(.hero) {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1.25fr) minmax(240px, 0.75fr);
-    gap: clamp(18px, 4vw, 36px);
-    min-height: 300px;
-    padding: clamp(22px, 4vw, 42px);
-    overflow: hidden;
-    border: 1px solid rgba(246, 239, 217, 0.22);
-    border-radius: 12px;
-    background:
-      linear-gradient(135deg, rgba(246, 239, 217, 0.06), transparent 48%),
-      linear-gradient(162deg, rgba(255, 85, 36, 0.08), rgba(12, 13, 11, 0.78) 42%),
-      #10110e;
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
-  }
-
-  :global(.hero::after) {
-    position: absolute;
-    right: -70px;
-    bottom: -100px;
-    width: 270px;
-    height: 270px;
-    border: 1px solid rgba(198, 255, 72, 0.26);
-    border-radius: 44% 56% 55% 45%;
-    content: '';
-    transform: rotate(-18deg);
-  }
-
-  :global(.hero-title) {
-    max-width: 920px;
-    margin: 0;
-    font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-    font-size: 104px;
-    font-weight: 800;
-    line-height: 0.86;
-    letter-spacing: 0;
-    text-transform: uppercase;
-  }
-
-  :global(.hero-title span) {
-    color: #ff5524;
-  }
-
-  :global(.lead) {
-    max-width: 760px;
-    margin: 18px 0 0;
-    color: rgba(246, 239, 217, 0.72);
-    font-size: 15px;
-    line-height: 1.75;
-  }
-
-  :global(.panel) {
-    border: 1px solid rgba(246, 239, 217, 0.2);
-    border-radius: 8px;
-    background: rgba(16, 17, 14, 0.76);
-    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.22);
-    backdrop-filter: blur(18px);
-  }
-
-  :global(.panel-pad) {
-    padding: clamp(16px, 2.4vw, 26px);
-  }
-
-  :global(.grid) {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 14px;
-  }
-
-  :global(.action) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    min-height: 40px;
-    padding: 9px 14px;
-    border: 1px solid rgba(246, 239, 217, 0.28);
-    border-radius: 10px;
-    color: #0c0d0b;
-    background: #c6ff48;
-    box-shadow: 3px 3px 0 rgba(255, 85, 36, 0.86);
-    font-weight: 800;
-    letter-spacing: 0;
-    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
-  }
-
-  :global(.action:hover) {
-    border-color: rgba(198, 255, 72, 0.58);
-    color: #0c0d0b;
-    background: #f6efd9;
-  }
-
-  :global(.action.secondary) {
-    color: #f6efd9;
-    background: rgba(246, 239, 217, 0.08);
-    box-shadow: none;
-  }
-
-  :global(.action.danger) {
-    color: #f6efd9;
-    background: rgba(255, 85, 36, 0.26);
-    box-shadow: none;
-  }
-
-  :global(.field) {
-    display: grid;
-    gap: 8px;
-  }
-
-  :global(.field span) {
-    color: rgba(246, 239, 217, 0.7);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0;
-    text-transform: uppercase;
-  }
-
-  :global(.input),
-  :global(.textarea) {
-    width: 100%;
-    border: 1px solid rgba(246, 239, 217, 0.22);
-    border-radius: 8px;
-    color: #f6efd9;
-    background: rgba(12, 13, 11, 0.72);
-    outline: none;
-  }
-
-  :global(.input) {
-    min-height: 44px;
-    padding: 0 16px;
-  }
-
-  :global(.textarea) {
-    min-height: 106px;
-    padding: 14px 16px;
-    resize: vertical;
-  }
-
-  :global(.input:focus),
-  :global(.textarea:focus) {
-    border-color: rgba(198, 255, 72, 0.74);
-    box-shadow: 0 0 0 4px rgba(198, 255, 72, 0.1);
-  }
-
-  :global(.notice) {
-    padding: 14px 16px;
-    border: 1px solid rgba(198, 255, 72, 0.22);
-    border-radius: 8px;
-    color: rgba(246, 239, 217, 0.82);
-    background: rgba(198, 255, 72, 0.08);
-    line-height: 1.6;
-  }
-
-  :global(.error) {
-    border-color: rgba(255, 85, 36, 0.5);
-    color: #ffd8c9;
-    background: rgba(255, 85, 36, 0.12);
-  }
-
   .site-shell {
     width: min(var(--shell-max), 100%);
     margin: 0 auto;
-    padding: calc(var(--topbar-top) + var(--topbar-height) + 28px) var(--shell-pad) 56px;
+    padding: calc(var(--topbar-top) + var(--topbar-height) + 28px)
+      var(--shell-pad) 56px;
   }
 
   .site-shell.has-account {
@@ -636,59 +359,19 @@
   }
 
   @media (max-width: 760px) {
-    :global(html) {
-      --topbar-actions-space: 116px;
-    }
-
     .site-shell.has-account {
       --topbar-actions-space: 96px;
-    }
-
-    :global(.breadcrumb) {
-      gap: 8px;
-      padding: 0 12px;
-    }
-
-    :global(.breadcrumb a:first-of-type),
-    :global(.breadcrumb a:first-of-type + span) {
-      display: none;
-    }
-
-    :global(.hero) {
-      grid-template-columns: 1fr;
-      min-height: auto;
-    }
-
-    :global(.hero-title) {
-      font-size: 68px;
     }
 
     .login-link {
       min-width: 54px;
       padding: 0 10px;
     }
-
   }
 
   @media (max-width: 460px) {
-    :global(html) {
-      --topbar-top: 10px;
-      --shell-pad: 12px;
-      --topbar-gap: 8px;
-      --topbar-actions-space: 104px;
-    }
-
     .site-shell.has-account {
       --topbar-actions-space: 96px;
-    }
-
-    :global(.breadcrumb) {
-      padding: 0 10px;
-      font-size: 11px;
-    }
-
-    :global(.breadcrumb strong) {
-      max-width: none;
     }
 
     .shell-topbar {
@@ -707,10 +390,6 @@
     .repo-link {
       width: 40px;
       flex: 0 0 40px;
-    }
-
-    :global(.hero-title) {
-      font-size: 54px;
     }
   }
 </style>

@@ -74,9 +74,7 @@
   <div>
     <span class="eyebrow">Raw GitHub Icon Library</span>
     <h1 class="hero-title">ICON<br /><span>SETS</span></h1>
-    <p class="lead">
-      为常用服务整理干净、可搜索、可复制链接的图标集合。
-    </p>
+    <p class="lead">为常用服务整理干净、可搜索、可复制链接的图标集合。</p>
   </div>
 
   <aside class="hero-card panel panel-pad">
@@ -130,7 +128,9 @@
                   复制地址
                 {/if}
               </button>
-              <a class="open-set" href={`/sets/${set.id}`} title="打开集合">OPEN →</a>
+              <a class="open-set" href={`/sets/${set.id}`} title="打开集合"
+                >OPEN →</a
+              >
             </div>
           </footer>
         </article>
@@ -140,6 +140,11 @@
 </section>
 
 <style>
+  .page-stack {
+    display: grid;
+    gap: 20px;
+  }
+
   .hero-card {
     align-self: end;
     display: grid;
@@ -185,7 +190,9 @@
     min-height: 230px;
     padding: 18px;
     overflow: hidden;
-    transition: border-color 180ms ease, background 180ms ease;
+    transition:
+      border-color 180ms ease,
+      background 180ms ease;
   }
 
   .set-card::before {
@@ -278,7 +285,10 @@
     background: rgba(246, 239, 217, 0.08);
     font-size: 12px;
     font-weight: 800;
-    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      color 160ms ease;
   }
 
   .copy-set:hover {

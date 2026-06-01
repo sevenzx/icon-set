@@ -22,7 +22,9 @@ function pushToast(message: string, variant: ToastVariant) {
   if (!trimmed) return;
 
   const id = nextToastId++;
-  toasts.update((items) => [...items, { id, message: trimmed, variant }].slice(-4));
+  toasts.update((items) =>
+    [...items, { id, message: trimmed, variant }].slice(-4)
+  );
   window.setTimeout(() => removeToast(id), toastTimeoutMs);
 }
 
