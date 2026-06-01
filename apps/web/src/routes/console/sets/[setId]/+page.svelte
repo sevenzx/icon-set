@@ -3,6 +3,7 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import DeleteConfirmModal from '$lib/DeleteConfirmModal.svelte';
+  import { manifestRawUrl } from '$lib/asset-url';
   import {
     getAdminSet,
     getSession,
@@ -14,13 +15,14 @@
   } from '$lib/api';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/toast';
-  import type { IconEntry, IconManifest } from '$lib/types';
+  import type { IconEntry, IconManifest, RepoConfig } from '$lib/types';
 
   type IconSortMode = 'name-asc' | 'name-desc' | 'path-asc';
 
   const batchUploadMaxBytes = 10 * 1024 * 1024;
 
   let manifest: IconManifest | null = null;
+  let repoConfig: RepoConfig | null = null;
   let loading = true;
   let savingMeta = false;
   let uploading = false;
@@ -49,6 +51,7 @@
   let activeMenuId = '';
   let renameValue = '';
   let renamingIcon = false;
+  let manifestUrlCopied = false;
   const iconNamePattern = /^[A-Za-z0-9 ._-]+$/;
   const managerPageSizeOptions = [24, 48, 96];
 
@@ -91,6 +94,7 @@
     pagedIcons.length > 0 &&
     pagedIcons.every((icon) => selectedIconIds.includes(icon.id));
   $: bulkDeleteConfirmLabel = `删除 ${selectedCount} 个`;
+  $: manifestUrl = manifest ? manifestRawUrl(manifest.id, repoConfig) : '';
 
   /// 同步 manifest 和依赖它的 UI 状态。
   function applyManifest(nextManifest: IconManifest) {
@@ -113,6 +117,7 @@
       await goto('/console/login');
       return false;
     }
+    repoConfig = session.repo_config ?? null;
     return true;
   }
 
@@ -437,6 +442,21 @@
     }
   }
 
+  async function copyManifestUrl() {
+    if (!manifestUrl) return;
+
+    try {
+      await copyText(manifestUrl);
+      manifestUrlCopied = true;
+      toast.info('Manifest URL 已复制');
+      window.setTimeout(() => {
+        manifestUrlCopied = false;
+      }, 1600);
+    } catch {
+      toast.error('复制 Manifest URL 失败');
+    }
+  }
+
   function openPreview(icon: IconEntry) {
     previewIcon = icon;
     activeMenuId = '';
@@ -540,6 +560,13 @@
 
       <div class="hero-actions">
         <a class="action secondary" href="/console">返回控制台</a>
+        <button
+          class="action secondary"
+          type="button"
+          on:click={copyManifestUrl}
+        >
+          {manifestUrlCopied ? '已复制 Manifest' : '复制 Manifest URL'}
+        </button>
       </div>
     </div>
 

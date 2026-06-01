@@ -2,15 +2,26 @@
   import { onMount } from 'svelte';
   import { manifestRawUrl } from '$lib/asset-url';
   import { copyText } from '$lib/clipboard';
-  import { listSets } from '$lib/api';
+  import { getSession, listSets } from '$lib/api';
   import { toast } from '$lib/toast';
-  import type { IconSetSummary } from '$lib/types';
+  import type { IconSetSummary, RepoConfig } from '$lib/types';
 
   let sets: IconSetSummary[] = [];
+  let repoConfig: RepoConfig | null = null;
   let loading = true;
   let error = '';
   let copiedSetId = '';
   let failedSetId = '';
+
+  /// 刷新当前登录用户的仓库配置，用于复制 GitHub Raw manifest 地址。
+  async function refreshRepoConfig() {
+    try {
+      const session = await getSession();
+      repoConfig = session.authenticated ? (session.repo_config ?? null) : null;
+    } catch {
+      repoConfig = null;
+    }
+  }
 
   /// 加载图标集合列表。
   async function refreshSets() {
@@ -36,7 +47,7 @@
 
   /// 复制集合 manifest.json 的 raw 地址。
   async function copySetUrl(setId: string) {
-    const url = manifestRawUrl(setId);
+    const url = manifestRawUrl(setId, repoConfig);
     copiedSetId = '';
     failedSetId = '';
 
@@ -57,10 +68,16 @@
   }
 
   onMount(() => {
-    void refreshSets();
+    void (async () => {
+      await refreshRepoConfig();
+      await refreshSets();
+    })();
 
     const handleAuthChanged = () => {
-      void refreshSets();
+      void (async () => {
+        await refreshRepoConfig();
+        await refreshSets();
+      })();
     };
     window.addEventListener('icon-set:auth-changed', handleAuthChanged);
 

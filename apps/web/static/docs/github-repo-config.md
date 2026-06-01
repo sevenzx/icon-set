@@ -86,19 +86,25 @@ Permissions:
 图标上传后，manifest 里会生成 GitHub Raw URL：
 
 ```txt
-https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
+https://raw.githubusercontent.com/{owner}/{repo}/refs/heads/{branch}/{path}
 ```
 
 例如：
 
 ```txt
-https://raw.githubusercontent.com/sevenzx/icon-set-assets/main/sets/emby/icons/logo.png
+https://raw.githubusercontent.com/jack/icon-set-assets/refs/heads/main/sets/example_id/icons/logo.png
 ```
 
 集合 manifest 地址：
 
 ```txt
-https://raw.githubusercontent.com/{owner}/{repo}/{branch}/sets/{set_id}/manifest.json
+https://raw.githubusercontent.com/{owner}/{repo}/refs/heads/{branch}/sets/{set_id}/manifest.json
+```
+
+例如：
+
+```txt
+https://raw.githubusercontent.com/jack/icon-set-assets/refs/heads/main/sets/example_id/manifest.json
 ```
 
 ## 数据隔离

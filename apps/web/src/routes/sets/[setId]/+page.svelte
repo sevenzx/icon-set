@@ -2,12 +2,13 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { manifestRawUrl } from '$lib/asset-url';
-  import { getSet } from '$lib/api';
+  import { getSession, getSet } from '$lib/api';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/toast';
-  import type { IconEntry, IconManifest } from '$lib/types';
+  import type { IconEntry, IconManifest, RepoConfig } from '$lib/types';
 
   let manifest: IconManifest | null = null;
+  let repoConfig: RepoConfig | null = null;
   let loading = true;
   let error = '';
   let query = '';
@@ -22,7 +23,7 @@
   const pageSizeOptions = [24, 48, 96];
 
   $: filteredIcons = filterIcons(manifest?.icons ?? [], query);
-  $: manifestUrl = manifest ? manifestRawUrl(manifest.id) : '';
+  $: manifestUrl = manifest ? manifestRawUrl(manifest.id, repoConfig) : '';
   $: showPaginationControls =
     (manifest?.icons.length ?? 0) > pageSizeOptions[0];
   $: totalPages = Math.max(1, Math.ceil(filteredIcons.length / pageSize));
@@ -37,6 +38,16 @@
   $: pageStart = (currentPage - 1) * pageSize;
   $: pageEnd = Math.min(pageStart + pageSize, filteredIcons.length);
   $: pagedIcons = filteredIcons.slice(pageStart, pageEnd);
+
+  /// 刷新当前登录用户的仓库配置，用于复制 GitHub Raw manifest 地址。
+  async function refreshRepoConfig() {
+    try {
+      const session = await getSession();
+      repoConfig = session.authenticated ? (session.repo_config ?? null) : null;
+    } catch {
+      repoConfig = null;
+    }
+  }
 
   /// 读取当前路由对应的图标集合。
   async function refreshManifest() {
@@ -117,10 +128,16 @@
   }
 
   onMount(() => {
-    void refreshManifest();
+    void (async () => {
+      await refreshRepoConfig();
+      await refreshManifest();
+    })();
 
     const handleAuthChanged = () => {
-      void refreshManifest();
+      void (async () => {
+        await refreshRepoConfig();
+        await refreshManifest();
+      })();
     };
     window.addEventListener('icon-set:auth-changed', handleAuthChanged);
 

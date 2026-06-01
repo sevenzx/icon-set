@@ -245,5 +245,5 @@ impl GitHubClient {
 }
 
 fn raw_base_url(owner: &str, repo: &str, branch: &str) -> String {
-    format!("https://raw.githubusercontent.com/{owner}/{repo}/{branch}")
+    format!("https://raw.githubusercontent.com/{owner}/{repo}/refs/heads/{branch}")
 }
