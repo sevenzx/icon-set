@@ -95,7 +95,7 @@
                 <span>{accountLogin}</span>
               </div>
               <a href="/console" role="menuitem" on:click={closeAccountMenu}>进入控制台</a>
-              <button type="button" role="menuitem" on:click={submitLogout}>登出</button>
+              <button type="button" role="menuitem" on:click={submitLogout}>退出登录</button>
             </div>
           {/if}
         </div>

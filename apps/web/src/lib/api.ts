@@ -143,6 +143,9 @@ export async function logout() {
   } finally {
     forgetAdminToken();
     authenticated.set(false);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('icon-set:auth-changed'));
+    }
   }
 }
 

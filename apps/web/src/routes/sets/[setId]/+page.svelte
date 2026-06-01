@@ -117,6 +117,15 @@
 
   onMount(() => {
     void refreshManifest();
+
+    const handleAuthChanged = () => {
+      void refreshManifest();
+    };
+    window.addEventListener('icon-set:auth-changed', handleAuthChanged);
+
+    return () => {
+      window.removeEventListener('icon-set:auth-changed', handleAuthChanged);
+    };
   });
 </script>
 
@@ -510,7 +519,7 @@
   .image-preview-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 120;
+    z-index: 1000;
     display: grid;
     place-items: center;
     padding: 20px;

@@ -132,8 +132,15 @@
 
 <style>
   .docs-shell {
+    width: 100%;
     max-width: 920px;
     margin: 0 auto;
+    overflow: hidden;
+  }
+
+  .markdown-body {
+    min-width: 0;
+    overflow-wrap: break-word;
   }
 
   .markdown-body :global(h1),
@@ -147,6 +154,7 @@
     margin: 0 0 22px;
     font-size: clamp(44px, 7vw, 72px);
     line-height: 0.94;
+    overflow-wrap: anywhere;
   }
 
   .markdown-body :global(h2) {
@@ -165,6 +173,7 @@
     color: rgba(246, 239, 217, 0.74);
     font-size: 15px;
     line-height: 1.85;
+    overflow-wrap: break-word;
   }
 
   .markdown-body :global(p) {
@@ -189,16 +198,19 @@
     color: #c6ff48;
     background: rgba(12, 13, 11, 0.58);
     font-size: 0.92em;
+    overflow-wrap: anywhere;
   }
 
   .markdown-body :global(pre) {
     margin: 14px 0 0;
+    max-width: 100%;
     overflow-x: auto;
     border: 1px solid rgba(246, 239, 217, 0.16);
     border-radius: 10px;
     background:
       linear-gradient(90deg, rgba(198, 255, 72, 0.06), transparent 42%),
       rgba(12, 13, 11, 0.72);
+    -webkit-overflow-scrolling: touch;
   }
 
   .markdown-body :global(pre code) {
@@ -209,5 +221,58 @@
     color: #f6efd9;
     background: transparent;
     line-height: 1.7;
+    white-space: pre;
+    overflow-wrap: normal;
+  }
+
+  @media (max-width: 640px) {
+    .docs-shell {
+      padding: 18px 14px;
+    }
+
+    .markdown-body :global(h1) {
+      margin-bottom: 18px;
+      font-size: clamp(30px, 9vw, 40px);
+      line-height: 1.08;
+    }
+
+    .markdown-body :global(h2) {
+      margin: 28px 0 10px;
+      font-size: 24px;
+      line-height: 1.16;
+    }
+
+    .markdown-body :global(h3) {
+      margin: 22px 0 8px;
+      font-size: 19px;
+      line-height: 1.22;
+    }
+
+    .markdown-body :global(p),
+    .markdown-body :global(li) {
+      font-size: 14px;
+      line-height: 1.78;
+    }
+
+    .markdown-body :global(ul) {
+      gap: 6px;
+      padding-left: 18px;
+    }
+
+    .markdown-body :global(code) {
+      padding: 1px 5px;
+      font-size: 0.88em;
+    }
+
+    .markdown-body :global(pre) {
+      margin-top: 12px;
+      border-radius: 8px;
+    }
+
+    .markdown-body :global(pre code) {
+      padding: 12px;
+      font-size: 12px;
+      line-height: 1.65;
+    }
   }
 </style>

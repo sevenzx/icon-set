@@ -8,7 +8,6 @@
     getRepoConfig,
     getSession,
     listAdminSets,
-    logout,
     saveRepoConfig
   } from '$lib/api';
   import { toast } from '$lib/toast';
@@ -146,12 +145,6 @@
     }
   }
 
-  /// 退出当前控制台会话。
-  async function submitLogout() {
-    await logout();
-    await goto('/console/login');
-  }
-
   /// 在前端生成和后端规则一致的 slug 预览。
   function slugifyClient(value: string) {
     return value
@@ -182,7 +175,6 @@
     <h1>控制台</h1>
     <p>登录用户拥有独立的 GitHub 仓库配置。所有写入都会提交到当前账号配置的仓库。</p>
   </div>
-  <button class="action secondary" type="button" on:click={submitLogout}>退出登录</button>
 </section>
 
 <form class="panel panel-pad repo-card" on:submit|preventDefault={submitRepoConfig}>
@@ -251,12 +243,12 @@
 
     <label class="field">
       <span>集合 ID</span>
-      <input class="input" bind:value={newSet.id} placeholder="emby" />
+      <input class="input" bind:value={newSet.id} placeholder="example_id" />
     </label>
 
     <label class="field">
       <span>集合名称</span>
-      <input class="input" bind:value={newSet.name} placeholder="Emby图标库@seven" />
+      <input class="input" bind:value={newSet.name} placeholder="你的集合名称" />
     </label>
 
     <label class="field">

@@ -19,9 +19,9 @@
 <style>
   .toast-host {
     position: fixed;
-    top: 20px;
+    top: calc(var(--topbar-top, 14px) + var(--topbar-height, 44px) + 12px);
     left: 50%;
-    z-index: 80;
+    z-index: 2000;
     display: grid;
     gap: 10px;
     width: min(420px, calc(100vw - 32px));
@@ -111,7 +111,7 @@
 
   @media (max-width: 640px) {
     .toast-host {
-      top: 14px;
+      top: calc(var(--topbar-top, 10px) + var(--topbar-height, 44px) + 10px);
       width: calc(100vw - 28px);
     }
   }

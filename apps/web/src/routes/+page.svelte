@@ -58,6 +58,15 @@
 
   onMount(() => {
     void refreshSets();
+
+    const handleAuthChanged = () => {
+      void refreshSets();
+    };
+    window.addEventListener('icon-set:auth-changed', handleAuthChanged);
+
+    return () => {
+      window.removeEventListener('icon-set:auth-changed', handleAuthChanged);
+    };
   });
 </script>
 
@@ -66,7 +75,7 @@
     <span class="eyebrow">Raw GitHub Icon Library</span>
     <h1 class="hero-title">ICON<br /><span>SETS</span></h1>
     <p class="lead">
-      为常用服务整理干净、可搜索、可复制链接的图标集合，让每一次替换封面和配置图标都更快一点。
+      为常用服务整理干净、可搜索、可复制链接的图标集合。
     </p>
   </div>
 
