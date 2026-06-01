@@ -120,6 +120,7 @@ impl Database {
             "alter table audit_log add column if not exists status_code integer",
             "alter table audit_log add column if not exists client_ip text",
             "alter table audit_log add column if not exists elapsed_ms bigint",
+            "create index if not exists audit_log_created_at_idx on audit_log (created_at)",
         ] {
             sqlx::query(statement)
                 .execute(&self.pool)
@@ -301,8 +302,15 @@ impl Database {
             .execute(&self.pool)
             .await
             .map_err(|err| AppError::Internal(format!("过期 OAuth state 清理失败：{err}")))?;
+        let audit_log_result =
+            sqlx::query("delete from audit_log where created_at < now() - interval '7 days'")
+                .execute(&self.pool)
+                .await
+                .map_err(|err| AppError::Internal(format!("过期审计日志清理失败：{err}")))?;
 
-        Ok(session_result.rows_affected() + state_result.rows_affected())
+        Ok(session_result.rows_affected()
+            + state_result.rows_affected()
+            + audit_log_result.rows_affected())
     }
 
     pub async fn user_profile(&self, user_id: i64, secrets: &SecretBox) -> AppResult<UserProfile> {

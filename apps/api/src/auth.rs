@@ -35,11 +35,6 @@ pub async fn destroy_session(state: &AppState, headers: &HeaderMap) -> AppResult
     Ok(())
 }
 
-/// 清理已经过期的登录会话和 OAuth state。
-pub async fn cleanup_expired_sessions(state: &AppState) -> AppResult<u64> {
-    state.db.cleanup_expired().await
-}
-
 /// 读取当前请求对应的登录会话。
 pub async fn current_session(
     state: &AppState,
