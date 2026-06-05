@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import DeleteConfirmModal from '$lib/DeleteConfirmModal.svelte';
-  import { manifestRawUrl } from '$lib/asset-url';
+  import { manifestRawUrl, sharePageUrl } from '$lib/asset-url';
   import {
     getAdminSet,
     getSession,
@@ -52,6 +52,7 @@
   let renameValue = '';
   let renamingIcon = false;
   let manifestUrlCopied = false;
+  let shareUrlCopied = false;
   const iconNamePattern = /^[A-Za-z0-9 ._-]+$/;
   const managerPageSizeOptions = [24, 48, 96];
 
@@ -457,6 +458,22 @@
     }
   }
 
+  /// 复制当前集合的分享链接。
+  async function copyShareUrl() {
+    if (!manifestUrl) return;
+
+    try {
+      await copyText(sharePageUrl(manifestUrl));
+      shareUrlCopied = true;
+      toast.info('分享链接已复制');
+      window.setTimeout(() => {
+        shareUrlCopied = false;
+      }, 1600);
+    } catch {
+      toast.error('复制分享链接失败');
+    }
+  }
+
   function openPreview(icon: IconEntry) {
     previewIcon = icon;
     activeMenuId = '';
@@ -566,6 +583,9 @@
           on:click={copyManifestUrl}
         >
           {manifestUrlCopied ? '已复制 Manifest' : '复制 Manifest URL'}
+        </button>
+        <button class="action secondary" type="button" on:click={copyShareUrl}>
+          {shareUrlCopied ? '已复制分享链接' : '复制分享链接'}
         </button>
       </div>
     </div>

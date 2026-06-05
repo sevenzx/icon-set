@@ -21,3 +21,9 @@ export function manifestRawUrl(
   const path = `/api/sets/${encodeURIComponent(setId)}`;
   return browser ? `${window.location.origin}${path}` : path;
 }
+
+/// 生成分享页地址，携带 manifest 的公网访问地址。
+export function sharePageUrl(manifestUrl: string) {
+  const path = `/share?icon_set_url=${encodeURIComponent(manifestUrl)}`;
+  return browser ? `${window.location.origin}${path}` : path;
+}

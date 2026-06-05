@@ -44,6 +44,11 @@ pub struct GithubCallbackQuery {
     state: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ShareSetQuery {
+    icon_set_url: String,
+}
+
 /// 返回健康检查状态。
 pub async fn health() -> Json<serde_json::Value> {
     Json(json!({ "ok": true }))
@@ -80,6 +85,27 @@ pub async fn get_set(
             Ok(Json(manifest))
         }
     }
+}
+
+/// 按公网 manifest 地址读取分享集合。
+pub async fn share_set(Query(query): Query<ShareSetQuery>) -> AppResult<Json<IconManifest>> {
+    let manifest_url = validate_share_manifest_url(&query.icon_set_url)?;
+    let response = reqwest::Client::new().get(manifest_url.clone()).send().await?;
+
+    if !response.status().is_success() {
+        return Err(AppError::BadRequest(format!(
+            "分享链接不可访问：HTTP {}",
+            response.status()
+        )));
+    }
+
+    let mut manifest = response.json::<IconManifest>().await.map_err(|err| {
+        AppError::BadRequest(format!("分享链接返回的 manifest 无法解析：{err}"))
+    })?;
+
+    normalize_shared_manifest(&manifest_url, &mut manifest)?;
+
+    Ok(Json(manifest))
 }
 
 /// 跳转到 GitHub OAuth 授权页。
@@ -900,6 +926,77 @@ fn normalize_manifest(github: &GitHubClient, set_id: &str, manifest: &mut IconMa
 /// 生成某个集合的 manifest 路径。
 fn manifest_path(set_id: &str) -> String {
     format!("sets/{set_id}/manifest.json")
+}
+
+/// 校验分享 manifest 地址必须是公网 http/https 链接。
+fn validate_share_manifest_url(value: &str) -> AppResult<String> {
+    let manifest_url = validate_required_text(value, "icon_set_url", 2000)?;
+    let parsed = reqwest::Url::parse(&manifest_url)
+        .map_err(|err| AppError::BadRequest(format!("icon_set_url 不是合法 URL：{err}")))?;
+
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(AppError::BadRequest(
+            "icon_set_url 只支持 http 或 https 地址".to_string(),
+        ));
+    }
+    if parsed.host_str().is_none() {
+        return Err(AppError::BadRequest(
+            "icon_set_url 必须包含可访问的域名".to_string(),
+        ));
+    }
+    if !parsed.path().ends_with("/manifest.json") {
+        return Err(AppError::BadRequest(
+            "icon_set_url 必须指向 manifest.json 文件".to_string(),
+        ));
+    }
+
+    Ok(parsed.to_string())
+}
+
+/// 规范化分享 manifest，保证页面渲染所需字段完整可用。
+fn normalize_shared_manifest(manifest_url: &str, manifest: &mut IconManifest) -> AppResult<()> {
+    manifest.name = validate_required_text(&manifest.name, "分享 manifest 名称", 200)?;
+    manifest.description = validate_optional_text(&manifest.description, 2000)?;
+    if manifest.updated_at.trim().is_empty() {
+        manifest.updated_at = now_iso();
+    }
+    if manifest.id.trim().is_empty() {
+        manifest.id = shared_manifest_id(manifest_url);
+    }
+
+    for (index, icon) in manifest.icons.iter_mut().enumerate() {
+        icon.name = validate_required_text(&icon.name, "分享图标名称", ICON_NAME_MAX_LEN)?;
+        icon.url = validate_share_icon_url(&icon.url)?;
+
+        if icon.id.trim().is_empty() {
+            icon.id = format!("shared-icon-{}", index + 1);
+        }
+    }
+
+    sort_icons(&mut manifest.icons);
+
+    Ok(())
+}
+
+/// 校验分享 manifest 中的图标地址必须可直接访问。
+fn validate_share_icon_url(value: &str) -> AppResult<String> {
+    let icon_url = validate_required_text(value, "分享图标地址", 2000)?;
+    let parsed = reqwest::Url::parse(&icon_url)
+        .map_err(|err| AppError::BadRequest(format!("分享图标地址不是合法 URL：{err}")))?;
+
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(AppError::BadRequest(
+            "分享图标地址只支持 http 或 https 协议".to_string(),
+        ));
+    }
+
+    Ok(parsed.to_string())
+}
+
+/// 从分享 manifest 地址推导稳定的集合 ID。
+fn shared_manifest_id(manifest_url: &str) -> String {
+    let digest = format!("{:x}", md5::compute(manifest_url));
+    format!("shared-{}", &digest[..12])
 }
 
 /// 生成 ISO 8601 更新时间。

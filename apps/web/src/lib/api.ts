@@ -140,6 +140,13 @@ export function getSet(setId: string) {
   return request<IconManifest>(`/api/sets/${encodeURIComponent(setId)}`);
 }
 
+/// 按分享地址读取指定图标集合的 manifest。
+export function getSharedSet(iconSetUrl: string) {
+  return request<IconManifest>(
+    `/api/share?icon_set_url=${encodeURIComponent(iconSetUrl)}`
+  );
+}
+
 /// 退出当前控制台会话。
 export async function logout() {
   try {

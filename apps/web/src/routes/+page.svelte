@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { manifestRawUrl } from '$lib/asset-url';
+  import { manifestRawUrl, sharePageUrl } from '$lib/asset-url';
   import { copyText } from '$lib/clipboard';
   import { getSession, listSets } from '$lib/api';
   import { toast } from '$lib/toast';
@@ -12,6 +12,8 @@
   let error = '';
   let copiedSetId = '';
   let failedSetId = '';
+  let copiedShareSetId = '';
+  let failedShareSetId = '';
 
   /// 刷新当前登录用户的仓库配置，用于复制 GitHub Raw manifest 地址。
   async function refreshRepoConfig() {
@@ -63,6 +65,28 @@
       toast.error('复制集合地址失败');
       window.setTimeout(() => {
         if (failedSetId === setId) failedSetId = '';
+      }, 1600);
+    }
+  }
+
+  /// 复制集合分享页地址。
+  async function copyShareSetUrl(setId: string) {
+    const url = sharePageUrl(manifestRawUrl(setId, repoConfig));
+    copiedShareSetId = '';
+    failedShareSetId = '';
+
+    try {
+      await copyText(url);
+      copiedShareSetId = setId;
+      toast.info('分享链接已复制');
+      window.setTimeout(() => {
+        if (copiedShareSetId === setId) copiedShareSetId = '';
+      }, 1600);
+    } catch {
+      failedShareSetId = setId;
+      toast.error('复制分享链接失败');
+      window.setTimeout(() => {
+        if (failedShareSetId === setId) failedShareSetId = '';
       }, 1600);
     }
   }
@@ -143,6 +167,20 @@
                   复制失败
                 {:else}
                   复制地址
+                {/if}
+              </button>
+              <button
+                class="copy-set"
+                type="button"
+                title="复制分享链接"
+                on:click={() => copyShareSetUrl(set.id)}
+              >
+                {#if copiedShareSetId === set.id}
+                  已复制分享链接
+                {:else if failedShareSetId === set.id}
+                  复制失败
+                {:else}
+                  复制分享链接
                 {/if}
               </button>
               <a class="open-set" href={`/sets/${set.id}`} title="打开集合"

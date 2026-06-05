@@ -129,6 +129,7 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         .route("/api/health", get(handlers::health))
         .route("/api/sets", get(handlers::list_sets))
         .route("/api/sets/{set_id}", get(handlers::get_set))
+        .route("/api/share", get(handlers::share_set))
         .route("/api/auth/github/start", get(handlers::github_oauth_start))
         .route(
             "/api/auth/github/callback",
