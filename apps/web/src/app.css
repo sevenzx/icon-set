@@ -343,6 +343,20 @@ button {
   margin: 12px 0 0;
 }
 
+.markdown-body a {
+  color: #c6ff48;
+  text-decoration: underline;
+  text-decoration-color: rgba(198, 255, 72, 0.46);
+  text-underline-offset: 3px;
+}
+
+.markdown-body a:hover,
+.markdown-body a:focus-visible {
+  color: #f6efd9;
+  text-decoration-color: #f6efd9;
+  outline: none;
+}
+
 .markdown-body ul {
   display: grid;
   gap: 8px;

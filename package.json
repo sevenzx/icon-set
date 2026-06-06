@@ -5,9 +5,8 @@
     "apps/web"
   ],
   "scripts": {
-    "sync:docs": "node scripts/sync-docs.mjs",
-    "format:web": "prettier --write \"apps/web/src/**/*.{svelte,ts,js,css}\" \"apps/web/*.{ts,js}\" \"scripts/**/*.mjs\" \"docs/**/*.md\"",
-    "format:check:web": "prettier --check \"apps/web/src/**/*.{svelte,ts,js,css}\" \"apps/web/*.{ts,js}\" \"scripts/**/*.mjs\" \"docs/**/*.md\"",
+    "format:web": "prettier --write \"apps/web/src/**/*.{svelte,ts,js,css}\" \"apps/web/*.{ts,js}\" \"apps/web/static/docs/**/*.md\"",
+    "format:check:web": "prettier --check \"apps/web/src/**/*.{svelte,ts,js,css}\" \"apps/web/*.{ts,js}\" \"apps/web/static/docs/**/*.md\"",
     "dev:web": "npm --workspace apps/web run dev",
     "build:web": "npm --workspace apps/web run build",
     "check:web": "npm --workspace apps/web run check",

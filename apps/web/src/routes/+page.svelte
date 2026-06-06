@@ -4,23 +4,50 @@
   import { manifestRawUrl, sharePageUrl } from '$lib/asset-url';
   import { copyText } from '$lib/clipboard';
   import { getSession, listSets } from '$lib/api';
+  import { renderMarkdown } from '$lib/markdown';
   import { toast } from '$lib/toast';
   import type { IconSetSummary, RepoConfig } from '$lib/types';
 
   let sets: IconSetSummary[] = [];
   let repoConfig: RepoConfig | null = null;
+  let introHtml = '';
+  let introError = '';
+  let sessionLoaded = false;
+  let isAuthenticated = false;
   let loading = true;
   let error = '';
   let failedSetId = '';
   let failedShareSetId = '';
 
+  $: showGuestIntro = sessionLoaded && !isAuthenticated;
+
   /// 刷新当前登录用户的仓库配置，用于复制 GitHub Raw manifest 地址。
   async function refreshRepoConfig() {
     try {
       const session = await getSession();
-      repoConfig = session.authenticated ? (session.repo_config ?? null) : null;
+      isAuthenticated = session.authenticated;
+      repoConfig = isAuthenticated ? (session.repo_config ?? null) : null;
     } catch {
+      isAuthenticated = false;
       repoConfig = null;
+    } finally {
+      sessionLoaded = true;
+    }
+  }
+
+  /// 加载未登录用户看到的网站功能介绍。
+  async function refreshIntro() {
+    introError = '';
+
+    try {
+      const response = await fetch('/docs/site-intro.md');
+      if (!response.ok) {
+        throw new Error(`网站介绍加载失败：${response.status}`);
+      }
+      introHtml = renderMarkdown(await response.text());
+    } catch (err) {
+      introHtml = '';
+      introError = err instanceof Error ? err.message : '网站介绍加载失败';
     }
   }
 
@@ -82,8 +109,7 @@
 
   onMount(() => {
     void (async () => {
-      await refreshRepoConfig();
-      await refreshSets();
+      await Promise.all([refreshRepoConfig(), refreshSets(), refreshIntro()]);
     })();
 
     const handleAuthChanged = () => {
@@ -112,6 +138,20 @@
     <span>active sets</span>
   </aside>
 </section>
+
+{#if showGuestIntro}
+  <section class="guest-intro panel panel-pad" aria-label="网站功能介绍">
+    {#if introError}
+      <div class="notice error">{introError}</div>
+    {:else if !introHtml}
+      <div class="notice">正在加载网站功能介绍...</div>
+    {:else}
+      <div class="markdown-body guest-markdown">
+        {@html introHtml}
+      </div>
+    {/if}
+  </section>
+{/if}
 
 <section class="page-stack">
   <div class="section-head">
@@ -190,6 +230,19 @@
   .page-stack {
     display: grid;
     gap: 20px;
+  }
+
+  .guest-intro {
+    margin: 20px 0;
+    overflow: hidden;
+    border-color: rgba(198, 255, 72, 0.24);
+    background:
+      linear-gradient(135deg, rgba(198, 255, 72, 0.07), transparent 42%),
+      rgba(16, 17, 14, 0.76);
+  }
+
+  .guest-markdown {
+    max-width: 900px;
   }
 
   .hero-card {

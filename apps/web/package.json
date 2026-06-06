@@ -4,11 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "sync:docs": "node ../../scripts/sync-docs.mjs",
     "dev": "svelte-kit sync && vite --host 0.0.0.0",
     "build": "svelte-kit sync && vite build",
     "preview": "vite preview",
-    "precheck": "npm run sync:docs",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:strict": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
   },
