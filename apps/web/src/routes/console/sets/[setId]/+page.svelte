@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Link2, Save, Share2 } from '@lucide/svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onMount } from 'svelte';
@@ -51,8 +52,6 @@
   let activeMenuId = '';
   let renameValue = '';
   let renamingIcon = false;
-  let manifestUrlCopied = false;
-  let shareUrlCopied = false;
   const iconNamePattern = /^[A-Za-z0-9 ._-]+$/;
   const managerPageSizeOptions = [24, 48, 96];
 
@@ -448,11 +447,7 @@
 
     try {
       await copyText(manifestUrl);
-      manifestUrlCopied = true;
       toast.info('Manifest URL 已复制');
-      window.setTimeout(() => {
-        manifestUrlCopied = false;
-      }, 1600);
     } catch {
       toast.error('复制 Manifest URL 失败');
     }
@@ -464,11 +459,7 @@
 
     try {
       await copyText(sharePageUrl(manifestUrl));
-      shareUrlCopied = true;
       toast.info('分享链接已复制');
-      window.setTimeout(() => {
-        shareUrlCopied = false;
-      }, 1600);
     } catch {
       toast.error('复制分享链接失败');
     }
@@ -577,15 +568,26 @@
 
       <div class="hero-actions">
         <a class="action secondary" href="/console">返回控制台</a>
+        <a class="action secondary console-action" href={`/collab?set_id=${manifest.id}`}>
+          协作管理
+        </a>
         <button
-          class="action secondary"
+          class="action secondary console-action"
           type="button"
+          aria-label="复制 Manifest URL"
           on:click={copyManifestUrl}
         >
-          {manifestUrlCopied ? '已复制 Manifest' : '复制 Manifest URL'}
+          <Link2 size={16} strokeWidth={2.2} />
+          Manifest
         </button>
-        <button class="action secondary" type="button" on:click={copyShareUrl}>
-          {shareUrlCopied ? '已复制分享链接' : '复制分享链接'}
+        <button
+          class="action secondary console-action"
+          type="button"
+          aria-label="复制分享链接"
+          on:click={copyShareUrl}
+        >
+          <Share2 size={16} strokeWidth={2.2} />
+          分享
         </button>
       </div>
     </div>
@@ -593,8 +595,9 @@
     <form class="hero-meta-form" on:submit|preventDefault={submitMeta}>
       <div class="hero-meta-head">
         <span class="eyebrow">Manifest Meta</span>
-        <button class="action" type="submit" disabled={savingMeta}>
-          {savingMeta ? '保存中...' : '保存信息'}
+        <button class="action console-action" type="submit" disabled={savingMeta}>
+          <Save size={16} strokeWidth={2.2} />
+          {savingMeta ? '保存中...' : '保存'}
         </button>
       </div>
       <label class="field">
@@ -1104,6 +1107,18 @@
     min-height: 40px;
     padding: 9px 14px;
     box-shadow: none;
+  }
+
+  .console-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    letter-spacing: 0.04em;
+  }
+
+  .console-action :global(svg) {
+    flex: 0 0 auto;
   }
 
   .hero-textarea {

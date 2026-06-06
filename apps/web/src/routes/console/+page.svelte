@@ -177,6 +177,9 @@
       登录用户拥有独立的 GitHub 仓库配置。所有写入都会提交到当前账号配置的仓库。
     </p>
   </div>
+  <a class="guide-link" href="/collab" title="进入协作管理">
+    协作管理
+  </a>
 </section>
 
 <form
@@ -294,7 +297,7 @@
         type="submit"
         disabled={saving || !repoConfigured || !newSet.id || !newSet.name}
       >
-        {saving ? '创建中...' : '创建集合'}
+        创建集合
       </button>
     </div>
   </form>
@@ -330,6 +333,9 @@
             <div class="row-actions">
               <a class="action secondary" href={`/console/sets/${set.id}`}
                 >管理</a
+              >
+              <a class="action secondary" href={`/collab?set_id=${set.id}`}
+                >协作</a
               >
               <button
                 class="action danger"

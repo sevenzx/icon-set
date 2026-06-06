@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CircleAlert, Link2, Share2 } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { manifestRawUrl, sharePageUrl } from '$lib/asset-url';
   import { getSession } from '$lib/api';
@@ -27,7 +28,6 @@
   let loading = true;
   let error = '';
   let query = '';
-  let copiedUrl = '';
   let failedUrl = '';
   let previewIcon: IconEntry | null = null;
   let pageSize = 24;
@@ -113,16 +113,11 @@
 
   /// 复制图标 raw 地址到剪贴板。
   async function copyUrl(url: string) {
-    copiedUrl = '';
     failedUrl = '';
 
     try {
       await copyText(url);
-      copiedUrl = url;
       toast.info('地址已复制');
-      window.setTimeout(() => {
-        if (copiedUrl === url) copiedUrl = '';
-      }, 1600);
     } catch {
       failedUrl = url;
       toast.error('复制地址失败');
@@ -216,30 +211,38 @@
         <span>icons</span>
       </div>
       <button
-        class="action secondary manifest-copy"
+        class="action secondary manifest-copy action-icon"
         type="button"
+        aria-label="复制 Manifest URL"
         on:click={() => copyUrl(manifestUrl)}
       >
-        {#if copiedUrl === manifestUrl}
-          已复制 Manifest
-        {:else if failedUrl === manifestUrl}
+        {#if failedUrl === manifestUrl}
+          <CircleAlert size={16} strokeWidth={2.2} />
+        {:else}
+          <Link2 size={16} strokeWidth={2.2} />
+        {/if}
+        {#if failedUrl === manifestUrl}
           复制失败
         {:else}
-          复制 Manifest URL
+          Manifest
         {/if}
       </button>
       {#if showShareButton}
         <button
-          class="action secondary manifest-copy"
+          class="action secondary manifest-copy action-icon"
           type="button"
+          aria-label="复制分享链接"
           on:click={copyShareUrl}
         >
-          {#if copiedUrl === sharePageUrl(manifestUrl)}
-            已复制分享链接
-          {:else if failedUrl === sharePageUrl(manifestUrl)}
+          {#if failedUrl === sharePageUrl(manifestUrl)}
+            <CircleAlert size={16} strokeWidth={2.2} />
+          {:else}
+            <Share2 size={16} strokeWidth={2.2} />
+          {/if}
+          {#if failedUrl === sharePageUrl(manifestUrl)}
             复制失败
           {:else}
-            复制分享链接
+            分享
           {/if}
         </button>
       {/if}
@@ -260,7 +263,6 @@
       {#each pagedIcons as icon}
         <article class="icon-card panel">
           <button
-            class:copied={copiedUrl === icon.url}
             class:failed={failedUrl === icon.url}
             class="copy-url"
             type="button"
@@ -268,11 +270,7 @@
             title="复制 Raw URL"
             on:click={() => copyUrl(icon.url)}
           >
-            {#if copiedUrl === icon.url}
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m5 12 4 4L19 6" />
-              </svg>
-            {:else if failedUrl === icon.url}
+            {#if failedUrl === icon.url}
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 7v6" />
                 <path d="M12 17h.01" />
@@ -389,7 +387,7 @@
           type="button"
           on:click={copyPreviewUrl}
         >
-          {copiedUrl === previewIcon.url ? '已复制' : '复制 Raw URL'}
+          复制 Raw URL
         </button>
       </footer>
     </div>
@@ -476,6 +474,18 @@
     min-height: 40px;
   }
 
+  .action-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    letter-spacing: 0.04em;
+  }
+
+  .action-icon :global(svg) {
+    flex: 0 0 auto;
+  }
+
   .toolbar {
     display: flex;
     align-items: center;
@@ -534,11 +544,6 @@
     color: #c6ff48;
     background: rgba(24, 26, 20, 0.92);
     outline: none;
-  }
-
-  .copy-url.copied {
-    border-color: rgba(198, 255, 72, 0.62);
-    color: #c6ff48;
   }
 
   .copy-url.failed {

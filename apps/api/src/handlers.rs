@@ -22,8 +22,11 @@ use crate::{
     github::GitHubClient,
     limits,
     models::{
-        CreateSetRequest, IconEntry, IconManifest, IconSetSummary, RenameIconRequest,
-        RepoConfigRequest, RepoConfigResponse, SessionResponse, UpdateSetRequest,
+        CollabLinkListQuery, CollabLinkResponse, CreateCollabLinkRequest, CreateSetRequest,
+        IconEntry, IconManifest, IconSetSummary, RenameIconRequest, RepoConfigRequest,
+        RepoConfigResponse, RevokeCollabLinksRequest, SessionResponse, ShareAccessAuthorizeRequest,
+        ShareAccessInspectQuery, ShareAccessInspectResponse, ShareAccessSessionResponse,
+        UpdateCollabLinkRequest, UpdateSetRequest,
     },
 };
 use zip::ZipArchive;
@@ -90,7 +93,10 @@ pub async fn get_set(
 /// 按公网 manifest 地址读取分享集合。
 pub async fn share_set(Query(query): Query<ShareSetQuery>) -> AppResult<Json<IconManifest>> {
     let manifest_url = validate_share_manifest_url(&query.icon_set_url)?;
-    let response = reqwest::Client::new().get(manifest_url.clone()).send().await?;
+    let response = reqwest::Client::new()
+        .get(manifest_url.clone())
+        .send()
+        .await?;
 
     if !response.status().is_success() {
         return Err(AppError::BadRequest(format!(
@@ -99,13 +105,342 @@ pub async fn share_set(Query(query): Query<ShareSetQuery>) -> AppResult<Json<Ico
         )));
     }
 
-    let mut manifest = response.json::<IconManifest>().await.map_err(|err| {
-        AppError::BadRequest(format!("分享链接返回的 manifest 无法解析：{err}"))
-    })?;
+    let mut manifest = response
+        .json::<IconManifest>()
+        .await
+        .map_err(|err| AppError::BadRequest(format!("分享链接返回的 manifest 无法解析：{err}")))?;
 
     normalize_shared_manifest(&manifest_url, &mut manifest)?;
 
     Ok(Json(manifest))
+}
+
+/// 列出当前用户指定集合的协作分享链接。
+pub async fn list_collab_links(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<CollabLinkListQuery>,
+) -> AppResult<Json<Vec<CollabLinkResponse>>> {
+    validate_set_id(&query.set_id)?;
+    let session = require_session(&state, &headers).await?;
+    let mut links = state
+        .db
+        .list_share_accesses(session.user_id, &query.set_id, &state.secrets)
+        .await?;
+
+    for link in &mut links {
+        link.share_url = absolute_collab_share_url(&state, &link.share_url);
+    }
+
+    Ok(Json(links))
+}
+
+/// 为当前用户指定集合创建新的协作分享链接。
+pub async fn create_collab_link(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateCollabLinkRequest>,
+) -> AppResult<Json<CollabLinkResponse>> {
+    validate_set_id(&payload.set_id)?;
+    let session = require_session(&state, &headers).await?;
+    let github = admin_github(&state, &headers).await?;
+    let (manifest, _) = load_manifest(&github, &payload.set_id).await?;
+    let token = Uuid::new_v4().to_string();
+    let token_hash = digest_token(&token);
+    let password = payload.password.trim();
+    let password_hash = if password.is_empty() {
+        None
+    } else {
+        Some(digest_password(password))
+    };
+    let password_plaintext = if password.is_empty() {
+        None
+    } else {
+        Some(password)
+    };
+    let expires_at = if let Some(expires_at) = payload.expires_at {
+        if expires_at <= Utc::now() {
+            return Err(AppError::BadRequest("到期时间必须晚于当前时间".to_string()));
+        }
+        Some(expires_at)
+    } else {
+        None
+    };
+    let mut link = state
+        .db
+        .create_share_access(
+            session.user_id,
+            &payload.set_id,
+            &manifest.name,
+            &token,
+            &token_hash,
+            password_plaintext,
+            password_hash.as_deref(),
+            expires_at,
+            &state.secrets,
+        )
+        .await?;
+    link.share_url = absolute_collab_share_url(&state, &token);
+
+    Ok(Json(link))
+}
+
+/// 更新当前用户的单条协作分享链接配置。
+pub async fn update_collab_link(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(link_id): Path<String>,
+    Json(payload): Json<UpdateCollabLinkRequest>,
+) -> AppResult<Json<CollabLinkResponse>> {
+    let session = require_session(&state, &headers).await?;
+    let link_id = link_id
+        .parse::<i64>()
+        .map_err(|_| AppError::BadRequest("协作链接 ID 无效".to_string()))?;
+
+    if let Some(Some(expires_at)) = payload.expires_at.as_ref() {
+        if expires_at.to_owned() <= Utc::now() {
+            return Err(AppError::BadRequest("到期时间必须晚于当前时间".to_string()));
+        }
+    }
+
+    let (password_hash_update, password_update) = if payload.clear_password {
+        (Some(None), Some(None))
+    } else if let Some(password) = payload.password {
+        let password = password.trim();
+        if password.is_empty() {
+            return Err(AppError::BadRequest("password 不能为空".to_string()));
+        }
+        (
+            Some(Some(digest_password(password))),
+            Some(Some(password.to_string())),
+        )
+    } else {
+        (None, None)
+    };
+
+    let mut link = state
+        .db
+        .update_share_access(
+            session.user_id,
+            link_id,
+            payload.expires_at,
+            password_hash_update,
+            password_update,
+            &state.secrets,
+        )
+        .await?
+        .ok_or(AppError::NotFound)?;
+    link.share_url = absolute_collab_share_url(&state, &link.share_url);
+
+    Ok(Json(link))
+}
+
+/// 失效当前用户某个集合的全部协作分享链接。
+pub async fn revoke_all_collab_links(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<RevokeCollabLinksRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    validate_set_id(&payload.set_id)?;
+    let session = require_session(&state, &headers).await?;
+    let revoked = state
+        .db
+        .revoke_all_share_accesses(session.user_id, &payload.set_id)
+        .await?;
+
+    Ok(Json(json!({ "revoked": revoked })))
+}
+
+/// 失效当前用户的单条协作分享链接。
+pub async fn revoke_collab_link(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(link_id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let session = require_session(&state, &headers).await?;
+    let link_id = link_id
+        .parse::<i64>()
+        .map_err(|_| AppError::BadRequest("协作链接 ID 无效".to_string()))?;
+    let revoked = state
+        .db
+        .revoke_share_access(session.user_id, link_id)
+        .await?;
+
+    if !revoked {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(Json(json!({ "revoked": true })))
+}
+
+/// 删除当前用户的单条协作分享链接。
+pub async fn delete_collab_link(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(link_id): Path<String>,
+) -> AppResult<Json<serde_json::Value>> {
+    let session = require_session(&state, &headers).await?;
+    let link_id = link_id
+        .parse::<i64>()
+        .map_err(|_| AppError::BadRequest("协作链接 ID 无效".to_string()))?;
+    let deleted = state
+        .db
+        .delete_share_access(session.user_id, link_id)
+        .await?;
+
+    if !deleted {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(Json(json!({ "deleted": true })))
+}
+
+/// 检查协作分享链接是否可进入。
+pub async fn inspect_share_access(
+    State(state): State<AppState>,
+    Query(query): Query<ShareAccessInspectQuery>,
+) -> AppResult<Json<ShareAccessInspectResponse>> {
+    let token_hash = digest_token(query.token.trim());
+    let share = state
+        .db
+        .inspect_share_access_by_token_hash(&token_hash)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    Ok(Json(share))
+}
+
+/// 使用协作分享链接进入共享编辑会话。
+pub async fn authorize_share_access(
+    State(state): State<AppState>,
+    Json(payload): Json<ShareAccessAuthorizeRequest>,
+) -> AppResult<Response> {
+    let token = payload.token.trim();
+    if token.is_empty() {
+        return Err(AppError::BadRequest("token 不能为空".to_string()));
+    }
+
+    let token_hash = digest_token(token);
+    let share = state
+        .db
+        .find_share_access_by_token_hash(&token_hash)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    ensure_share_access_available(&share)?;
+
+    if let Some(expected_password_hash) = &share.password_hash {
+        let password = payload.password.trim();
+        if password.is_empty() || digest_password(password) != *expected_password_hash {
+            return Err(AppError::Unauthorized);
+        }
+    }
+
+    let session_token =
+        auth::create_share_access_session(&state, share.id, share.owner_user_id, &share.set_id)
+            .await?;
+    let cookie = auth::share_access_cookie_value(&state, &session_token);
+    let mut response = Json(ShareAccessSessionResponse {
+        active: true,
+        set_id: Some(share.set_id),
+        set_name: Some(share.set_name),
+        expires_at: Some(Utc::now() + auth::SHARE_ACCESS_SESSION_TTL),
+    })
+    .into_response();
+    auth::set_cookie_header(response.headers_mut(), cookie)?;
+
+    Ok(response)
+}
+
+/// 查询当前协作者共享编辑会话状态。
+pub async fn current_share_access(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<Json<ShareAccessSessionResponse>> {
+    let Some(session) = auth::current_share_access_session(&state, &headers).await? else {
+        return Ok(Json(ShareAccessSessionResponse {
+            active: false,
+            set_id: None,
+            set_name: None,
+            expires_at: None,
+        }));
+    };
+    let github = share_access_github(&state, &session).await?;
+    let (manifest, _) = load_manifest(&github, &session.set_id).await?;
+
+    Ok(Json(ShareAccessSessionResponse {
+        active: true,
+        set_id: Some(session.set_id),
+        set_name: Some(manifest.name),
+        expires_at: Some(session.expires_at),
+    }))
+}
+
+/// 退出当前协作者共享编辑会话。
+pub async fn logout_share_access(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<Response> {
+    auth::destroy_share_access_session(&state, &headers).await?;
+    let cookie = auth::expired_share_access_cookie_value(&state);
+    let mut response = Json(ShareAccessSessionResponse {
+        active: false,
+        set_id: None,
+        set_name: None,
+        expires_at: None,
+    })
+    .into_response();
+    auth::set_cookie_header(response.headers_mut(), cookie)?;
+    Ok(response)
+}
+
+/// 读取当前协作者被授权的图标集合。
+pub async fn get_share_edit_set(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<Json<IconManifest>> {
+    let session = auth::require_share_access_session(&state, &headers).await?;
+    let github = share_access_github(&state, &session).await?;
+    let (manifest, _) = load_manifest(&github, &session.set_id).await?;
+    Ok(Json(manifest))
+}
+
+/// 协作者上传图片到被授权的图标集合。
+pub async fn upload_share_edit_icon(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    multipart: Multipart,
+) -> AppResult<Json<IconManifest>> {
+    let session = auth::require_share_access_session(&state, &headers).await?;
+    upload_icon_to_set(state, session.owner_user_id, &session.set_id, multipart).await
+}
+
+/// 协作者批量上传图片或 zip 压缩包到被授权的图标集合。
+pub async fn upload_share_edit_icons_batch(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    multipart: Multipart,
+) -> AppResult<Json<IconManifest>> {
+    let session = auth::require_share_access_session(&state, &headers).await?;
+    upload_icons_batch_to_set(state, session.owner_user_id, &session.set_id, multipart).await
+}
+
+/// 协作者修改被授权集合中的图标名称。
+pub async fn rename_share_edit_icon(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(icon_id): Path<String>,
+    Json(payload): Json<RenameIconRequest>,
+) -> AppResult<Json<IconManifest>> {
+    let session = auth::require_share_access_session(&state, &headers).await?;
+    rename_icon_in_set(
+        state,
+        session.owner_user_id,
+        &session.set_id,
+        &icon_id,
+        payload,
+    )
+    .await
 }
 
 /// 跳转到 GitHub OAuth 授权页。
@@ -424,10 +759,76 @@ pub async fn upload_icon(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(set_id): Path<String>,
-    mut multipart: Multipart,
+    multipart: Multipart,
+) -> AppResult<Json<IconManifest>> {
+    let session = require_session(&state, &headers).await?;
+    upload_icon_to_set(state, session.user_id, &set_id, multipart).await
+}
+
+/// 批量上传图片或 zip 压缩包并写入对应集合的 manifest。
+pub async fn upload_icons_batch(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(set_id): Path<String>,
+    multipart: Multipart,
+) -> AppResult<Json<IconManifest>> {
+    let session = require_session(&state, &headers).await?;
+    upload_icons_batch_to_set(state, session.user_id, &set_id, multipart).await
+}
+
+/// 修改指定图标的名称。
+pub async fn rename_icon(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((set_id, icon_id)): Path<(String, String)>,
+    Json(payload): Json<RenameIconRequest>,
+) -> AppResult<Json<IconManifest>> {
+    let session = require_session(&state, &headers).await?;
+    rename_icon_in_set(state, session.user_id, &set_id, &icon_id, payload).await
+}
+
+/// 删除指定图标及其 GitHub 图片文件。
+pub async fn delete_icon(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((set_id, icon_id)): Path<(String, String)>,
 ) -> AppResult<Json<IconManifest>> {
     let github = admin_github(&state, &headers).await?;
     validate_set_id(&set_id)?;
+
+    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
+    let Some(position) = manifest.icons.iter().position(|icon| icon.id == icon_id) else {
+        return Err(AppError::NotFound);
+    };
+    let icon = manifest.icons.remove(position);
+
+    if !icon.path.is_empty() {
+        delete_github_file_if_exists(&github, &icon.path, &format!("Delete icon {}", icon.name))
+            .await?;
+    }
+
+    manifest.updated_at = now_iso();
+    save_manifest(
+        &github,
+        &manifest,
+        Some(&manifest_sha),
+        &format!("Update icon set {set_id}"),
+    )
+    .await?;
+    sync_set_summary(&github, &manifest).await?;
+
+    Ok(Json(manifest))
+}
+
+/// 上传图片并写入对应集合的 manifest。
+async fn upload_icon_to_set(
+    state: AppState,
+    owner_user_id: i64,
+    set_id: &str,
+    mut multipart: Multipart,
+) -> AppResult<Json<IconManifest>> {
+    let github = github_for_user(&state, owner_user_id).await?;
+    validate_set_id(set_id)?;
 
     let mut icon_name: Option<String> = None;
     let mut upload: Option<UploadFile> = None;
@@ -468,11 +869,11 @@ pub async fn upload_icon(
     };
     let icon_id = Uuid::new_v4().to_string();
     let md5 = file_md5(&upload.bytes);
-    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
+    let (mut manifest, manifest_sha) = load_manifest(&github, set_id).await?;
     hydrate_missing_icon_md5(&github, &mut manifest).await?;
     ensure_unique_icon_md5(&manifest, &md5)?;
     let (name, path) =
-        unique_icon_name_and_path(&github, &manifest, &set_id, &name, &extension, None, None)
+        unique_icon_name_and_path(&github, &manifest, set_id, &name, &extension, None, None)
             .await?;
 
     github
@@ -500,14 +901,14 @@ pub async fn upload_icon(
 }
 
 /// 批量上传图片或 zip 压缩包并写入对应集合的 manifest。
-pub async fn upload_icons_batch(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(set_id): Path<String>,
+async fn upload_icons_batch_to_set(
+    state: AppState,
+    owner_user_id: i64,
+    set_id: &str,
     mut multipart: Multipart,
 ) -> AppResult<Json<IconManifest>> {
-    let github = admin_github(&state, &headers).await?;
-    validate_set_id(&set_id)?;
+    let github = github_for_user(&state, owner_user_id).await?;
+    validate_set_id(set_id)?;
 
     let mut uploads: Vec<BatchUploadFile> = Vec::new();
     let mut total_bytes: usize = 0;
@@ -548,7 +949,7 @@ pub async fn upload_icons_batch(
         ));
     }
 
-    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
+    let (mut manifest, manifest_sha) = load_manifest(&github, set_id).await?;
     hydrate_missing_icon_md5(&github, &mut manifest).await?;
     ensure_unique_batch_md5s(&manifest, &uploads)?;
     let mut new_icons = Vec::with_capacity(uploads.len());
@@ -559,7 +960,7 @@ pub async fn upload_icons_batch(
         let (name, path) = unique_icon_name_and_path(
             &github,
             &manifest,
-            &set_id,
+            set_id,
             &requested_name,
             &extension,
             None,
@@ -597,16 +998,17 @@ pub async fn upload_icons_batch(
 }
 
 /// 修改指定图标的名称。
-pub async fn rename_icon(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path((set_id, icon_id)): Path<(String, String)>,
-    Json(payload): Json<RenameIconRequest>,
+async fn rename_icon_in_set(
+    state: AppState,
+    owner_user_id: i64,
+    set_id: &str,
+    icon_id: &str,
+    payload: RenameIconRequest,
 ) -> AppResult<Json<IconManifest>> {
-    let github = admin_github(&state, &headers).await?;
-    validate_set_id(&set_id)?;
+    let github = github_for_user(&state, owner_user_id).await?;
+    validate_set_id(set_id)?;
 
-    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
+    let (mut manifest, manifest_sha) = load_manifest(&github, set_id).await?;
     let Some(icon_position) = manifest.icons.iter().position(|icon| icon.id == icon_id) else {
         return Err(AppError::NotFound);
     };
@@ -616,7 +1018,7 @@ pub async fn rename_icon(
     let (name, path) = unique_icon_name_and_path(
         &github,
         &manifest,
-        &set_id,
+        set_id,
         &requested_name,
         &extension,
         Some(&icon_id),
@@ -672,39 +1074,6 @@ pub async fn rename_icon(
     Ok(Json(manifest))
 }
 
-/// 删除指定图标及其 GitHub 图片文件。
-pub async fn delete_icon(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path((set_id, icon_id)): Path<(String, String)>,
-) -> AppResult<Json<IconManifest>> {
-    let github = admin_github(&state, &headers).await?;
-    validate_set_id(&set_id)?;
-
-    let (mut manifest, manifest_sha) = load_manifest(&github, &set_id).await?;
-    let Some(position) = manifest.icons.iter().position(|icon| icon.id == icon_id) else {
-        return Err(AppError::NotFound);
-    };
-    let icon = manifest.icons.remove(position);
-
-    if !icon.path.is_empty() {
-        delete_github_file_if_exists(&github, &icon.path, &format!("Delete icon {}", icon.name))
-            .await?;
-    }
-
-    manifest.updated_at = now_iso();
-    save_manifest(
-        &github,
-        &manifest,
-        Some(&manifest_sha),
-        &format!("Update icon set {set_id}"),
-    )
-    .await?;
-    sync_set_summary(&github, &manifest).await?;
-
-    Ok(Json(manifest))
-}
-
 struct UploadFile {
     file_name: String,
     content_type: Option<String>,
@@ -737,13 +1106,23 @@ async fn require_session(
         .ok_or(AppError::Unauthorized)
 }
 
+/// 根据 owner 用户 ID 读取其 GitHub 配置并构造客户端。
+async fn github_for_user(state: &AppState, owner_user_id: i64) -> AppResult<GitHubClient> {
+    let repo_config = state.db.repo_config(owner_user_id, &state.secrets).await?;
+    Ok(GitHubClient::from_repo_config(repo_config))
+}
+
 async fn admin_github(state: &AppState, headers: &HeaderMap) -> AppResult<GitHubClient> {
     let session = require_session(state, headers).await?;
-    let repo_config = state
-        .db
-        .repo_config(session.user_id, &state.secrets)
-        .await?;
-    Ok(GitHubClient::from_repo_config(repo_config))
+    github_for_user(state, session.user_id).await
+}
+
+/// 根据协作者会话解析出 owner 的 GitHub 客户端。
+async fn share_access_github(
+    state: &AppState,
+    session: &crate::db::ShareAccessSession,
+) -> AppResult<GitHubClient> {
+    github_for_user(state, session.owner_user_id).await
 }
 
 async fn public_data_source(state: &AppState, headers: &HeaderMap) -> AppResult<PublicDataSource> {
@@ -997,6 +1376,46 @@ fn validate_share_icon_url(value: &str) -> AppResult<String> {
 fn shared_manifest_id(manifest_url: &str) -> String {
     let digest = format!("{:x}", md5::compute(manifest_url));
     format!("shared-{}", &digest[..12])
+}
+
+/// 计算协作分享 token 的固定摘要，用于数据库索引和比对。
+fn digest_token(token: &str) -> String {
+    format!("{:x}", md5::compute(token.trim()))
+}
+
+/// 计算协作分享 password 的固定摘要。
+fn digest_password(password: &str) -> String {
+    format!("{:x}", md5::compute(password.trim()))
+}
+
+/// 检查协作分享链接当前是否可用。
+fn ensure_share_access_available(share: &crate::db::ShareAccessGrant) -> AppResult<()> {
+    if share.revoked_at.is_some() {
+        return Err(AppError::Forbidden);
+    }
+    if share
+        .expires_at
+        .map(|value| value <= Utc::now())
+        .unwrap_or(false)
+    {
+        return Err(AppError::Forbidden);
+    }
+
+    Ok(())
+}
+
+/// 拼出协作者进入共享编辑页时使用的链接。
+fn collab_share_url(token: &str) -> String {
+    format!("/share/edit?token={}", urlencoding::encode(token))
+}
+
+/// 生成可直接复制给协作者的完整共享编辑链接。
+fn absolute_collab_share_url(state: &AppState, token: &str) -> String {
+    format!(
+        "{}{}",
+        state.config.app_base_url.trim_end_matches('/'),
+        collab_share_url(token)
+    )
 }
 
 /// 生成 ISO 8601 更新时间。

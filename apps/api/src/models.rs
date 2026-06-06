@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,4 +91,78 @@ pub struct UpdateSetRequest {
 #[derive(Debug, Deserialize)]
 pub struct RenameIconRequest {
     pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateCollabLinkRequest {
+    pub set_id: String,
+    pub expires_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateCollabLinkRequest {
+    #[serde(default)]
+    pub expires_at: Option<Option<DateTime<Utc>>>,
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub clear_password: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CollabLinkListQuery {
+    pub set_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RevokeCollabLinksRequest {
+    pub set_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ShareAccessInspectQuery {
+    pub token: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ShareAccessAuthorizeRequest {
+    pub token: String,
+    #[serde(default)]
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CollabLinkResponse {
+    pub id: String,
+    pub set_id: String,
+    pub share_url: String,
+    pub password_enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub active: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ShareAccessInspectResponse {
+    pub set_id: String,
+    pub set_name: String,
+    pub password_enabled: bool,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub active: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ShareAccessSessionResponse {
+    pub active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
 }

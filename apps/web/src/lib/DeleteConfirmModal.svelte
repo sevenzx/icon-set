@@ -12,19 +12,19 @@
   export let onCancel: () => void = () => {};
   export let onConfirm: () => void | Promise<void> = () => {};
 
-  let step = 1;
   let confirmValue = '';
   let lastOpen = false;
 
   $: if (open !== lastOpen) {
     if (open) {
-      step = 1;
       confirmValue = '';
     }
     lastOpen = open;
   }
 
-  $: canSubmit = confirmValue === confirmLabel && !submitting;
+  $: requiresTypedConfirm = confirmLabel.trim().length > 0;
+  $: canSubmit =
+    (!requiresTypedConfirm || confirmValue === confirmLabel) && !submitting;
 
   function cancel() {
     if (submitting) return;
@@ -75,10 +75,12 @@
       <h2 id="delete-modal-title">{title}</h2>
       <p>{description}</p>
 
-      <div class="target-block">
-        <span>目标</span>
-        <strong>{target}</strong>
-      </div>
+      {#if target}
+        <div class="target-block">
+          <span>目标</span>
+          <strong>{target}</strong>
+        </div>
+      {/if}
 
       {#if impact.length > 0}
         <ul class="impact-list">
@@ -88,21 +90,7 @@
         </ul>
       {/if}
 
-      {#if step === 1}
-        <div class="modal-actions">
-          <button
-            class="action secondary"
-            type="button"
-            disabled={submitting}
-            on:click={cancel}>取消</button
-          >
-          <button
-            class="action danger"
-            type="button"
-            on:click={() => (step = 2)}>继续删除</button
-          >
-        </div>
-      {:else}
+      {#if requiresTypedConfirm}
         <label class="field confirm-field">
           <span>{confirmHint || `输入 ${confirmLabel} 继续`}</span>
           <input
@@ -113,25 +101,23 @@
             disabled={submitting}
           />
         </label>
-        <div class="modal-actions">
-          <button
-            class="action secondary"
-            type="button"
-            disabled={submitting}
-            on:click={() => (step = 1)}
-          >
-            上一步
-          </button>
-          <button
-            class="action danger"
-            type="button"
-            disabled={!canSubmit}
-            on:click={onConfirm}
-          >
-            {submitting ? '删除中...' : actionLabel}
-          </button>
-        </div>
       {/if}
+      <div class="modal-actions">
+        <button
+          class="action secondary"
+          type="button"
+          disabled={submitting}
+          on:click={cancel}>取消</button
+        >
+        <button
+          class="action danger"
+          type="button"
+          disabled={!canSubmit}
+          on:click={onConfirm}
+        >
+          {actionLabel}
+        </button>
+      </div>
     </div>
   </div>
 {/if}

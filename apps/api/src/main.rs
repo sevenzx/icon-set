@@ -125,6 +125,49 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
             middleware::require_admin,
         ));
 
+    let collab_router = Router::new()
+        .route(
+            "/links",
+            get(handlers::list_collab_links).post(handlers::create_collab_link),
+        )
+        .route("/links/revoke-all", post(handlers::revoke_all_collab_links))
+        .route("/links/{link_id}", patch(handlers::update_collab_link))
+        .route(
+            "/links/{link_id}/revoke",
+            post(handlers::revoke_collab_link).delete(handlers::delete_collab_link),
+        )
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::audit_admin,
+        ))
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::prevent_duplicate_submit,
+        ))
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::require_csrf,
+        ))
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::require_admin,
+        ));
+
+    let share_access_router = Router::new()
+        .route("/inspect", get(handlers::inspect_share_access))
+        .route("/authorize", post(handlers::authorize_share_access))
+        .route("/current", get(handlers::current_share_access))
+        .route("/logout", post(handlers::logout_share_access));
+
+    let share_edit_router = Router::new()
+        .route("/set", get(handlers::get_share_edit_set))
+        .route("/icons", post(handlers::upload_share_edit_icon))
+        .route(
+            "/icons/batch",
+            post(handlers::upload_share_edit_icons_batch),
+        )
+        .route("/icons/{icon_id}", patch(handlers::rename_share_edit_icon));
+
     let app = Router::new()
         .route("/api/health", get(handlers::health))
         .route("/api/sets", get(handlers::list_sets))
@@ -138,6 +181,9 @@ fn build_router(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         .route("/api/auth/logout", post(handlers::logout))
         .route("/api/auth/session", get(handlers::session))
         .nest("/api/console", console_router)
+        .nest("/api/collab", collab_router)
+        .nest("/api/share-access", share_access_router)
+        .nest("/api/share-edit", share_edit_router)
         .layer(DefaultBodyLimit::max(
             state
                 .config

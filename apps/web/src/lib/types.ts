@@ -62,3 +62,42 @@ export type UpdateSetPayload = {
   name?: string;
   description?: string;
 };
+
+export type CollabLink = {
+  id: string;
+  set_id: string;
+  share_url: string;
+  password_enabled: boolean;
+  password?: string;
+  expires_at?: string;
+  revoked_at?: string;
+  created_at: string;
+  active: boolean;
+};
+
+export type CreateCollabLinkPayload = {
+  set_id: string;
+  expires_at?: string;
+  password?: string;
+};
+
+export type UpdateCollabLinkPayload = {
+  expires_at?: string | null;
+  password?: string;
+  clear_password?: boolean;
+};
+
+export type ShareAccessInspect = {
+  set_id: string;
+  set_name: string;
+  password_enabled: boolean;
+  expires_at?: string;
+  active: boolean;
+};
+
+export type ShareAccessSession = {
+  active: boolean;
+  set_id?: string;
+  set_name?: string;
+  expires_at?: string;
+};

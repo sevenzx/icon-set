@@ -4,12 +4,14 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
-    db::AuthSession,
+    db::{AuthSession, ShareAccessSession},
     error::{AppError, AppResult},
 };
 
 pub const SESSION_TTL: Duration = Duration::days(7);
+pub const SHARE_ACCESS_SESSION_TTL: Duration = Duration::days(1);
 const ADMIN_TOKEN_HEADER: &str = "x-admin-token";
+const SHARE_ACCESS_COOKIE_NAME: &str = "icon_set_share_session";
 
 pub struct CreatedSession {
     pub cookie_token: String,
@@ -66,6 +68,59 @@ pub async fn require_admin_access(state: &AppState, headers: &HeaderMap) -> AppR
     Err(AppError::Unauthorized)
 }
 
+/// 创建新的协作者会话并返回 cookie token。
+pub async fn create_share_access_session(
+    state: &AppState,
+    share_access_id: i64,
+    owner_user_id: i64,
+    set_id: &str,
+) -> AppResult<String> {
+    let token = Uuid::new_v4().to_string();
+    state
+        .db
+        .create_share_access_session(
+            &token,
+            share_access_id,
+            owner_user_id,
+            set_id,
+            SHARE_ACCESS_SESSION_TTL,
+        )
+        .await?;
+
+    Ok(token)
+}
+
+/// 读取当前请求对应的协作者会话。
+pub async fn current_share_access_session(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> AppResult<Option<ShareAccessSession>> {
+    let Some(token) = read_session_cookie(headers, SHARE_ACCESS_COOKIE_NAME) else {
+        return Ok(None);
+    };
+
+    state.db.get_share_access_session(&token).await
+}
+
+/// 要求当前请求具备有效的协作者会话。
+pub async fn require_share_access_session(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> AppResult<ShareAccessSession> {
+    current_share_access_session(state, headers)
+        .await?
+        .ok_or(AppError::Unauthorized)
+}
+
+/// 删除当前请求中的协作者会话。
+pub async fn destroy_share_access_session(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
+    if let Some(token) = read_session_cookie(headers, SHARE_ACCESS_COOKIE_NAME) {
+        state.db.delete_share_access_session(&token).await?;
+    }
+
+    Ok(())
+}
+
 fn constant_time_eq(input: &str, expected: &str) -> bool {
     let input = input.as_bytes();
     let expected = expected.as_bytes();
@@ -100,6 +155,32 @@ pub fn expired_session_cookie_value(state: &AppState) -> String {
     let mut value = format!(
         "{}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
         state.config.session_cookie_name
+    );
+    if state.config.cookie_secure {
+        value.push_str("; Secure");
+    }
+    value
+}
+
+/// 生成协作者登录成功后的 Set-Cookie 值。
+pub fn share_access_cookie_value(state: &AppState, token: &str) -> String {
+    let mut value = format!(
+        "{}={}; Path=/; Max-Age={}; HttpOnly; SameSite=Lax",
+        SHARE_ACCESS_COOKIE_NAME,
+        token,
+        SHARE_ACCESS_SESSION_TTL.num_seconds()
+    );
+    if state.config.cookie_secure {
+        value.push_str("; Secure");
+    }
+    value
+}
+
+/// 生成退出协作者会话时清理 Cookie 的 Set-Cookie 值。
+pub fn expired_share_access_cookie_value(state: &AppState) -> String {
+    let mut value = format!(
+        "{}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+        SHARE_ACCESS_COOKIE_NAME
     );
     if state.config.cookie_secure {
         value.push_str("; Secure");

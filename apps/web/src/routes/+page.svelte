@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CircleAlert, Link2, Share2 } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { manifestRawUrl, sharePageUrl } from '$lib/asset-url';
   import { copyText } from '$lib/clipboard';
@@ -10,9 +11,7 @@
   let repoConfig: RepoConfig | null = null;
   let loading = true;
   let error = '';
-  let copiedSetId = '';
   let failedSetId = '';
-  let copiedShareSetId = '';
   let failedShareSetId = '';
 
   /// 刷新当前登录用户的仓库配置，用于复制 GitHub Raw manifest 地址。
@@ -50,16 +49,11 @@
   /// 复制集合 manifest.json 的 raw 地址。
   async function copySetUrl(setId: string) {
     const url = manifestRawUrl(setId, repoConfig);
-    copiedSetId = '';
     failedSetId = '';
 
     try {
       await copyText(url);
-      copiedSetId = setId;
       toast.info('集合地址已复制');
-      window.setTimeout(() => {
-        if (copiedSetId === setId) copiedSetId = '';
-      }, 1600);
     } catch {
       failedSetId = setId;
       toast.error('复制集合地址失败');
@@ -72,16 +66,11 @@
   /// 复制集合分享页地址。
   async function copyShareSetUrl(setId: string) {
     const url = sharePageUrl(manifestRawUrl(setId, repoConfig));
-    copiedShareSetId = '';
     failedShareSetId = '';
 
     try {
       await copyText(url);
-      copiedShareSetId = setId;
       toast.info('分享链接已复制');
-      window.setTimeout(() => {
-        if (copiedShareSetId === setId) copiedShareSetId = '';
-      }, 1600);
     } catch {
       failedShareSetId = setId;
       toast.error('复制分享链接失败');
@@ -156,36 +145,39 @@
             <span>{set.icon_count} icons</span>
             <div class="card-actions">
               <button
-                class="copy-set"
+                class="copy-set compact-action"
                 type="button"
                 title="复制 manifest.json 地址"
                 on:click={() => copySetUrl(set.id)}
               >
-                {#if copiedSetId === set.id}
-                  已复制
-                {:else if failedSetId === set.id}
+                {#if failedSetId === set.id}
+                  <CircleAlert size={15} strokeWidth={2.2} />
+                {:else}
+                  <Link2 size={15} strokeWidth={2.2} />
+                {/if}
+                {#if failedSetId === set.id}
                   复制失败
                 {:else}
-                  复制地址
+                  Manifest
                 {/if}
               </button>
               <button
-                class="copy-set"
+                class="copy-set compact-action"
                 type="button"
                 title="复制分享链接"
                 on:click={() => copyShareSetUrl(set.id)}
               >
-                {#if copiedShareSetId === set.id}
-                  已复制分享链接
-                {:else if failedShareSetId === set.id}
+                {#if failedShareSetId === set.id}
+                  <CircleAlert size={15} strokeWidth={2.2} />
+                {:else}
+                  <Share2 size={15} strokeWidth={2.2} />
+                {/if}
+                {#if failedShareSetId === set.id}
                   复制失败
                 {:else}
-                  复制分享链接
+                  分享
                 {/if}
               </button>
-              <a class="open-set" href={`/sets/${set.id}`} title="打开集合"
-                >OPEN →</a
-              >
             </div>
           </footer>
         </article>
@@ -332,6 +324,10 @@
   }
 
   .copy-set {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
     min-height: 34px;
     padding: 0 12px;
     border: 1px solid rgba(246, 239, 217, 0.2);
@@ -352,9 +348,12 @@
     background: #c6ff48;
   }
 
-  .open-set {
-    color: #c6ff48;
-    font-weight: 800;
+  .compact-action {
+    letter-spacing: 0.04em;
+  }
+
+  .compact-action :global(svg) {
+    flex: 0 0 auto;
   }
 
   .empty {

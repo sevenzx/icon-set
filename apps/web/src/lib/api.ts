@@ -1,11 +1,16 @@
 import { authenticated } from './auth-state';
 import type {
+  CollabLink,
+  CreateCollabLinkPayload,
   CreateSetPayload,
   IconManifest,
   IconSetSummary,
   RepoConfig,
   RepoConfigPayload,
   SessionResponse,
+  ShareAccessInspect,
+  ShareAccessSession,
+  UpdateCollabLinkPayload,
   UpdateSetPayload
 } from './types';
 
@@ -288,5 +293,130 @@ export function removeIcon(setId: string, iconId: string) {
   return consoleRequest<IconManifest>(
     `/api/console/sets/${encodeURIComponent(setId)}/icons/${encodeURIComponent(iconId)}`,
     { method: 'DELETE' }
+  );
+}
+
+/// 列出当前用户指定集合的协作分享链接。
+export function listCollabLinks(setId: string) {
+  return consoleRequest<CollabLink[]>(
+    `/api/collab/links?set_id=${encodeURIComponent(setId)}`
+  );
+}
+
+/// 为指定集合创建新的协作分享链接。
+export function createCollabLink(payload: CreateCollabLinkPayload) {
+  return consoleRequest<CollabLink>('/api/collab/links', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+/// 更新单条协作分享链接配置。
+export function updateCollabLink(
+  linkId: string,
+  payload: UpdateCollabLinkPayload
+) {
+  return consoleRequest<CollabLink>(
+    `/api/collab/links/${encodeURIComponent(linkId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+/// 失效单条协作分享链接。
+export function revokeCollabLink(linkId: string) {
+  return consoleRequest<{ revoked: boolean }>(
+    `/api/collab/links/${encodeURIComponent(linkId)}/revoke`,
+    { method: 'POST' }
+  );
+}
+
+/// 删除单条协作分享链接。
+export function deleteCollabLink(linkId: string) {
+  return consoleRequest<{ deleted: boolean }>(
+    `/api/collab/links/${encodeURIComponent(linkId)}/revoke`,
+    { method: 'DELETE' }
+  );
+}
+
+/// 失效某个集合的全部协作分享链接。
+export function revokeAllCollabLinks(setId: string) {
+  return consoleRequest<{ revoked: number }>('/api/collab/links/revoke-all', {
+    method: 'POST',
+    body: JSON.stringify({ set_id: setId })
+  });
+}
+
+/// 检查协作分享 token 当前是否可进入。
+export function inspectShareAccess(token: string) {
+  return request<ShareAccessInspect>(
+    `/api/share-access/inspect?token=${encodeURIComponent(token)}`
+  );
+}
+
+/// 使用 token 和可选 password 进入协作编辑会话。
+export function authorizeShareAccess(token: string, password: string) {
+  return request<ShareAccessSession>('/api/share-access/authorize', {
+    method: 'POST',
+    body: JSON.stringify({ token, password })
+  });
+}
+
+/// 查询当前协作编辑会话。
+export function getShareAccessSession() {
+  return request<ShareAccessSession>('/api/share-access/current');
+}
+
+/// 退出当前协作编辑会话。
+export function logoutShareAccess() {
+  return request<ShareAccessSession>('/api/share-access/logout', {
+    method: 'POST'
+  });
+}
+
+/// 读取当前协作者被授权的图标集合。
+export function getShareEditSet() {
+  return request<IconManifest>('/api/share-edit/set');
+}
+
+/// 协作者上传图片到被授权集合。
+export function uploadShareEditIcon(name: string, file: File) {
+  const form = new FormData();
+  form.append('name', name);
+  form.append('file', file);
+
+  return request<IconManifest>('/api/share-edit/icons', {
+    method: 'POST',
+    body: form
+  });
+}
+
+/// 协作者批量上传图片或 zip 压缩包到被授权集合。
+export function uploadShareEditIconsBatch(files: File[], archive: File | null) {
+  const form = new FormData();
+
+  for (const file of files) {
+    form.append('files', file);
+  }
+  if (archive) {
+    form.append('archive', archive);
+  }
+
+  return request<IconManifest>('/api/share-edit/icons/batch', {
+    method: 'POST',
+    body: form
+  });
+}
+
+/// 协作者修改被授权集合中的图标名称。
+export function renameShareEditIcon(iconId: string, name: string) {
+  return request<IconManifest>(
+    `/api/share-edit/icons/${encodeURIComponent(iconId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ name })
+    }
   );
 }
