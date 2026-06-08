@@ -177,18 +177,15 @@ Token 权限建议：
 - Contents：Read and write
 - Metadata：Read
 
-详细步骤见 [GitHub 仓库配置指引](docs/github-repo-config.md)。
+详细步骤见 [GitHub 仓库配置指引](apps/web/static/docs/github-repo-config.md)。
 
 ## 常用命令
 
 ```bash
-npm run sync:docs
 npm run check:web
 npm run build:web
 npm run check:api
 ```
-
-`docs/github-repo-config.md` 会同步到 `apps/web/static/docs/github-repo-config.md` 供前端文档页读取。`npm run sync:docs` 可以手动同步；前端 dev/build 时也会自动同步。
 
 ## Docker 部署
 

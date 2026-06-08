@@ -11,8 +11,6 @@ COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
 RUN npm ci
 
-COPY scripts scripts
-COPY docs docs
 COPY apps/web apps/web
 RUN npm --workspace apps/web run build
 
